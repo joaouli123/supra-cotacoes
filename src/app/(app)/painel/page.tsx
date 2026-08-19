@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { sessao, filtroEmpresa } from '@/lib/sessao'
+import { exigir } from '@/lib/acesso'
+import { filtroEmpresa } from '@/lib/sessao'
 import { todos, contar } from '@/lib/db'
 import { economiaConsolidada } from '@/lib/consultas'
 import { moeda, moedaCurta, numero, percentual, dataHora, dataRelativa, data } from '@/lib/formato'
@@ -12,7 +13,7 @@ import {
 export const dynamic = 'force-dynamic'
 
 export default async function PaginaPainel() {
-  const s = await sessao()
+  const s = await exigir('painel')
   const eid = s.empresa?.id ?? null
   const p = eid ? [eid] : []
   // Predicado de empresa sempre valido: sem empresa no contexto (administrador

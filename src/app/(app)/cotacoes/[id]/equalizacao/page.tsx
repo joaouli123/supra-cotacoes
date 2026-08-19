@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { exigir, exigirEmpresa } from '@/lib/acesso'
 import { equalizacaoDa } from '@/lib/consultas'
 import { moeda, moedaCurta, numero, percentual, dec } from '@/lib/formato'
 import { Painel, CabecalhoPagina, Kpi, GradeKpis, Vazio, Tag, Delta, Barra, Aviso } from '@/components/ui'
@@ -9,10 +10,12 @@ import { IconeCheck, IconeAlerta, IconeBalanca, IconeGrafico, IconeMoeda, IconeC
 export const dynamic = 'force-dynamic'
 
 export default async function PaginaEqualizacao({ params }: { params: { id: string } }) {
+  const s = await exigir('cotacoes')
   const id = Number(params.id)
   const r = await equalizacaoDa(id)
   if (!r) notFound()
   const { cot, eq } = r
+  exigirEmpresa(s, cot.empresa_id)
 
   if (eq.fornecedores.length === 0) {
     return (

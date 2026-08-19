@@ -1,5 +1,5 @@
 import { todos, um } from '@/lib/db'
-import { sessao } from '@/lib/sessao'
+import { exigir } from '@/lib/acesso'
 import { numero, percentual, data, iniciais } from '@/lib/formato'
 import { Painel, CabecalhoPagina, Tag, Kpi, GradeKpis, Vazio, Barra, Aviso } from '@/components/ui'
 import { IconePredio, IconeUsuario, IconeBalanca, IconeCaixa, IconeCadeado, IconeLocal } from '@/components/icones'
@@ -7,7 +7,7 @@ import { IconePredio, IconeUsuario, IconeBalanca, IconeCaixa, IconeCadeado, Icon
 export const dynamic = 'force-dynamic'
 
 export default async function PaginaEmpresas() {
-  const s = await sessao()
+  const s = await exigir('admin')
 
   const linhas = await todos<{
     id: number; razao_social: string; nome_fantasia: string; cnpj: string; cidade: string; uf: string

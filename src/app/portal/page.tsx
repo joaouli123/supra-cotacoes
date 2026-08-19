@@ -17,9 +17,9 @@ export default async function PortalInicio() {
         </h1>
         <Painel semPadding>
           <Vazio icone={<IconePorta size={20} />} titulo="Nenhum fornecedor na sessão"
-            descricao="O acesso ao portal externo é feito pelo token do convite. Escolha o perfil Fornecedor na tela inicial para entrar."
-            acao={<Link href="/api/contexto?perfil=fornecedor&voltar=/portal" className="btn btn-primario">
-              Entrar como fornecedor<IconeSeta size={15} />
+            descricao="O acesso ao portal externo é feito pelo link do convite enviado por e-mail. Ele identifica o fornecedor sem exigir cadastro nem senha."
+            acao={<Link href="/" className="btn btn-secundario">
+              Voltar ao início<IconeSeta size={15} />
             </Link>} />
         </Painel>
       </>

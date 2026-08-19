@@ -1,5 +1,5 @@
 import { um } from '@/lib/db'
-import { caminhoInterno, redirecionar } from '@/lib/http'
+import { caminhoInterno, origemPropria, redirecionar } from '@/lib/http'
 import { COOKIE_SESSAO, OPCOES_COOKIE_SESSAO, assinarCracha, conferirSenha } from '@/lib/auth'
 
 /** Formulario nativo (method=post): funciona sem JavaScript no cliente. */
@@ -14,6 +14,11 @@ const JANELA = 5 * 60_000
 
 function excedeu(ip: string): boolean {
   const agora = Date.now()
+  // Varre os expirados antes de gravar: sem isso o mapa cresceria com um
+  // registro por IP que ja tentou entrar, e nunca encolheria.
+  if (TENTATIVAS.size > 512) {
+    for (const [chave, v] of TENTATIVAS) if (v.ate < agora) TENTATIVAS.delete(chave)
+  }
   const reg = TENTATIVAS.get(ip)
   if (!reg || reg.ate < agora) { TENTATIVAS.set(ip, { n: 1, ate: agora + JANELA }); return false }
   reg.n += 1
@@ -21,6 +26,10 @@ function excedeu(ip: string): boolean {
 }
 
 export async function POST(req: Request) {
+  // Formulario postado por outro site nao entra: evita que um terceiro
+  // logue a vitima numa conta que ele controla.
+  if (!origemPropria(req)) return redirecionar('/entrar?erro=origem')
+
   const form = await req.formData()
   const email = String(form.get('email') ?? '').trim()
   const senha = String(form.get('senha') ?? '')

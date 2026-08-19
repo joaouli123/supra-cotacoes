@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { sessao } from '@/lib/sessao'
+import { exigir } from '@/lib/acesso'
 import { todos, um } from '@/lib/db'
 import { numero, data, dataRelativa } from '@/lib/formato'
 import { Painel, Paginacao, CabecalhoPagina, Vazio, StatusTag, Tag, Barra } from '@/components/ui'
@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
 const POR_PAGINA = 25
 
 export default async function PaginaCotacoes({ searchParams }: { searchParams: { [k: string]: string | undefined } }) {
-  const s = await sessao()
+  const s = await exigir('cotacoes')
   const eid = s.empresa?.id ?? null
   const q = (searchParams.q ?? '').trim()
   const status = searchParams.status ?? ''

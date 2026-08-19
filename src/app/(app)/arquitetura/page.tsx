@@ -1,4 +1,5 @@
 import { contar } from '@/lib/db'
+import { exigir } from '@/lib/acesso'
 import { numero } from '@/lib/formato'
 import { CabecalhoPagina, Tag } from '@/components/ui'
 import { IconeArquitetura, IconeCaixa, IconeFabrica, IconeArvore, IconeCamada, IconePredio, IconeEscudo } from '@/components/icones'
@@ -155,6 +156,7 @@ const ICONES_NUMERO = [
 ]
 
 export default async function PaginaArquitetura() {
+  await exigir('arquitetura')
   const materiais = await contar('select count(*) c from materiais')
   const fornecedores = await contar('select count(*) c from fornecedores')
   const classificacoes = await contar('select count(*) c from classificacoes')

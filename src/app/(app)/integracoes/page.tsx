@@ -1,4 +1,4 @@
-import { sessao } from '@/lib/sessao'
+import { exigir } from '@/lib/acesso'
 import { todos, um } from '@/lib/db'
 import { numero, dataRelativa, dec } from '@/lib/formato'
 import { Painel, CabecalhoPagina, Vazio, StatusTag, Tag, Kpi, GradeKpis, Aviso } from '@/components/ui'
@@ -7,7 +7,7 @@ import { IconeAlerta, IconeConector, IconeSincronia, IconeCheck, IconeRelogio, I
 export const dynamic = 'force-dynamic'
 
 export default async function PaginaIntegracoes({ searchParams }: { searchParams: { [k: string]: string | undefined } }) {
-  const s = await sessao()
+  const s = await exigir('integracoes')
   const eid = s.empresa?.id ?? null
   const p = eid ? [eid] : []
   const filtroConector = searchParams.conector ?? ''

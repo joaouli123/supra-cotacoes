@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { exigir, exigirEmpresa } from '@/lib/acesso'
 import { um, todos } from '@/lib/db'
 import { moeda, numero, data, dataHora, dec } from '@/lib/formato'
 import { Painel, CabecalhoPagina, Campo, Vazio, Tag, StatusTag } from '@/components/ui'
@@ -8,15 +9,17 @@ import { IconeFabrica, IconeEtiqueta, IconeBalanca, IconeEscudo, IconeDocumento,
 export const dynamic = 'force-dynamic'
 
 export default async function PaginaFornecedor({ params }: { params: { id: string } }) {
+  const s = await exigir('cadastros')
   const id = Number(params.id)
   const f = await um<{
     id: number; razao_social: string; nome_fantasia: string; cnpj: string; email: string
     telefone: string; contato: string; cidade: string; uf: string; cond_pagamento: string
     prazo_entrega_dias: number; avaliacao: number; homologado: number; ativo: number
-    criado_em: string; atualizado_em: string; empresa: string | null
+    criado_em: string; atualizado_em: string; empresa_id: number | null; empresa: string | null
   }>(`select f.*, e.nome_fantasia as empresa from fornecedores f
         left join empresas e on e.id = f.empresa_id where f.id = ?`, [id])
   if (!f) notFound()
+  exigirEmpresa(s, f.empresa_id, true)
 
   const grupos = await todos<{ nome: string; nivel: number; caminho: string }>(
     `select c.nome, c.nivel, c.caminho from fornecedor_grupos fg

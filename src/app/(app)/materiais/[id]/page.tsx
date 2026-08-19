@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { exigir, exigirEmpresa } from '@/lib/acesso'
 import { um, todos } from '@/lib/db'
 import { trilhaClassificacao } from '@/lib/consultas'
 import { moeda, numero, data } from '@/lib/formato'
@@ -10,17 +11,19 @@ export const dynamic = 'force-dynamic'
 const NIVEIS = ['Grupo', 'Subgrupo', 'Família', 'Subfamília', 'Classe']
 
 export default async function PaginaMaterial({ params }: { params: { id: string } }) {
+  const s = await exigir('cadastros')
   const id = Number(params.id)
   const m = await um<{
     id: number; codigo: string; descricao: string; especificacao: string; ncm: string
     preco_referencia: number; curva: string; estoque_minimo: number | null; ativo: number
     criado_em: string; atualizado_em: string; unidade: string; unidade_desc: string
-    classificacao_id: number; empresa: string | null
+    classificacao_id: number; empresa_id: number | null; empresa: string | null
   }>(
     `select m.*, un.sigla as unidade, un.descricao as unidade_desc, e.nome_fantasia as empresa
        from materiais m join unidades un on un.id = m.unidade_id
        left join empresas e on e.id = m.empresa_id where m.id = ?`, [id])
   if (!m) notFound()
+  exigirEmpresa(s, m.empresa_id, true)
 
   const trilha = await trilhaClassificacao(m.classificacao_id)
   const grupoRaiz = trilha[0]

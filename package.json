@@ -4,7 +4,8 @@
   "private": true,
   "description": "SUPRA — Plataforma de Cotacoes Corporativas (sistema demonstrativo)",
   "scripts": {
-    "seed": "node --no-warnings scripts/seed.mjs",
+    "seed": "node --no-warnings scripts/seed.mjs && node --no-warnings scripts/migrar-base.mjs",
+    "migrar": "node --no-warnings scripts/migrar-auth.mjs && node --no-warnings scripts/migrar-base.mjs",
     "dev": "next dev -p 3010",
     "build": "next build",
     "start": "next start -p 3010",

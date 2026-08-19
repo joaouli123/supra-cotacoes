@@ -43,6 +43,13 @@ function pool() {
     max: Number(process.env.DATABASE_POOL_MAX ?? 10),
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
+    keepAlive: true,
+    // Teto por consulta: uma varredura acidental numa tabela de cem mil
+    // linhas devolve erro em vez de prender uma conexao do pool ate o
+    // timeout do navegador — com pool de 10, dez dessas parariam o sistema.
+    statement_timeout: Number(process.env.DATABASE_STATEMENT_TIMEOUT_MS ?? 15_000),
+    query_timeout: Number(process.env.DATABASE_STATEMENT_TIMEOUT_MS ?? 15_000),
+    application_name: 'supra',
     // Coolify entrega Postgres na rede interna, sem TLS
     ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
   })
@@ -119,9 +126,18 @@ export async function transacao<T>(fn: () => Promise<T>): Promise<T> {
 /** Normaliza a entrada em tokens de pelo menos duas letras. */
 function tokens(entrada: string): string[] {
   return entrada
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/["'()*:^&|!<>\\-]/g, ' ')
-    .split(/\s+/).filter((t) => t.length >= 2)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    // Lista de permissao, nao de proibicao: tudo que nao for letra ou digito
+    // vira separador. Nenhum caractere de sintaxe do FTS5 nem do tsquery
+    // chega a consulta, entao nao ha o que escapar — e nem como derrubar a
+    // pagina com uma busca do tipo `((` ou `:*`.
+    .replace(/[^A-Za-z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter((t) => t.length >= 2)
+    // Busca com dezenas de termos so consome CPU; oito ja e mais do que
+    // qualquer pessoa digita.
+    .slice(0, 8)
 }
 
 /** Sintaxe MATCH do FTS5, com prefixo em cada token. */

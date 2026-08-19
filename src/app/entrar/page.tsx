@@ -13,6 +13,7 @@ const MENSAGENS: Record<string, string> = {
   vazio: 'Preencha o e-mail e a senha.',
   inativo: 'Esta conta está desativada. Procure o administrador da plataforma.',
   expirada: 'Sua sessão expirou. Entre novamente.',
+  origem: 'Requisição recusada por vir de outro endereço. Entre pela própria página.',
 }
 
 export default async function Entrar({

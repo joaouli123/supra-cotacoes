@@ -68,8 +68,11 @@ else
   fi
 fi
 
-# Idempotente: garante a coluna de senha e aplica a conta administrativa por
-# cima da base existente, a cada subida.
+# Idempotentes, aplicados por cima da base existente a cada subida.
+# Nenhum dos dois apaga dado: o primeiro garante a coluna de senha e a conta
+# administrativa; o segundo troca tokens fracos do portal, cria os indices que
+# faltavam e atualiza as estatisticas do planejador.
 node --no-warnings scripts/migrar-auth.mjs
+node --no-warnings scripts/migrar-base.mjs
 
 exec "$@"

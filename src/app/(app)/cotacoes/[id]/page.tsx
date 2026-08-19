@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { exigir, exigirEmpresa } from '@/lib/acesso'
 import { todos, um } from '@/lib/db'
 import { cotacao, itensDaCotacao } from '@/lib/consultas'
 import { moeda, numero, data, dataHora, dataRelativa, dec } from '@/lib/formato'
@@ -9,9 +10,11 @@ import { IconeBalanca, IconeEnvio, IconePorta, IconeCotacao, IconeFabrica, Icone
 export const dynamic = 'force-dynamic'
 
 export default async function PaginaCotacao({ params }: { params: { id: string } }) {
+  const s = await exigir('cotacoes')
   const id = Number(params.id)
   const c = await cotacao(id)
   if (!c) notFound()
+  exigirEmpresa(s, c.empresa_id)
 
   const itens = await itensDaCotacao(id)
   const totalReferencia = itens.reduce((s, i) => s + i.preco_referencia * i.quantidade, 0)

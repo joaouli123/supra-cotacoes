@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { um, todos } from './db'
-import { COOKIE_SESSAO, lerCracha } from './auth'
+import { COOKIE_SESSAO, lerCracha, lerValor } from './auth'
 
 export type Perfil = 'admin_central' | 'gestor' | 'comprador' | 'fornecedor'
 
@@ -66,30 +66,40 @@ export async function sessao(opcoes: { publico?: boolean } = {}): Promise<Sessao
 
   if (!autenticado && !opcoes.publico) redirect('/entrar')
 
+  const ehAdmin = autenticado?.perfil === 'admin_central'
+
   const pedido = c.get('supra_perfil')?.value as Perfil | undefined
   const desejado = pedido && PERFIS.includes(pedido) ? pedido : undefined
 
-  // Somente o administrador da plataforma enxerga por outro perfil; os demais
-  // ficam presos ao proprio, independentemente do cookie.
+  // Somente o administrador da plataforma enxerga por outro perfil. Os demais
+  // ficam presos ao proprio e o visitante do portal e sempre fornecedor: os
+  // cookies de contexto nao sao httpOnly, entao nao valem como credencial.
   const perfil: Perfil = autenticado
-    ? (autenticado.perfil === 'admin_central' ? desejado ?? 'admin_central' : autenticado.perfil)
-    : desejado ?? 'fornecedor'
+    ? (ehAdmin ? desejado ?? 'admin_central' : autenticado.perfil)
+    : 'fornecedor'
 
   const simulando = !!autenticado && perfil !== autenticado.perfil
   const usuario = autenticado && !simulando ? autenticado : await usuarioPadrao(perfil)
 
-  // O administrador central pode navegar por qualquer empresa (troca de contexto).
-  const idEmpresaCookie = Number(c.get('supra_empresa')?.value ?? 0)
-  const idEmpresa = usuario.empresa_id ?? (idEmpresaCookie || null)
+  // A troca de empresa e prerrogativa do administrador central; para os demais
+  // vale a empresa gravada no proprio cadastro, e so ela.
+  const idEmpresaCookie = ehAdmin ? Number(c.get('supra_empresa')?.value ?? 0) || null : null
+  const idEmpresa = usuario.empresa_id ?? idEmpresaCookie
 
   const empresa = idEmpresa
     ? (await um<Empresa>(`select id,razao_social,nome_fantasia,cnpj,uf,cidade,segmento,plano
                             from empresas where id = ?`, [idEmpresa])) ?? null
     : null
 
-  // No portal externo quem identifica o fornecedor e o token do convite:
-  // ele e a credencial, e prevalece sobre o usuario da sessao.
-  const idFornecedor = Number(c.get('supra_fornecedor')?.value ?? 0) || usuario.fornecedor_id
+  // No portal externo quem identifica o fornecedor e o token do convite. O
+  // cookie que guarda esse resultado e assinado em /api/portal: sem a
+  // assinatura, qualquer visitante trocaria o numero e leria as cotacoes de
+  // outro fornecedor. Vinculo do proprio cadastro sempre tem precedencia.
+  // Visitante sem convite valido nao tem fornecedor nenhum: cair no vinculo do
+  // usuario representante do perfil exibiria as cotacoes de um fornecedor real
+  // para quem so abriu o endereco do portal.
+  const doConvite = Number(lerValor(c.get('supra_fornecedor')?.value) ?? 0) || null
+  const idFornecedor = autenticado ? autenticado.fornecedor_id ?? doConvite : doConvite
   const fornecedor = idFornecedor
     ? (await um<{ id: number; razao_social: string; nome_fantasia: string; cnpj: string }>(
         `select id, razao_social, nome_fantasia, cnpj from fornecedores where id = ?`,
@@ -119,8 +129,12 @@ export function filtroEmpresa(idEmpresa: number | null, alias = '', compartilhav
     : { sql: `${col} = ?`, params: [idEmpresa] }
 }
 
-export function podeVer(perfil: Perfil, area: string): boolean {
-  const mapa: Record<Perfil, string[]> = {
+export type Area =
+  | 'painel' | 'cadastros' | 'demandas' | 'cotacoes' | 'agendamentos'
+  | 'integracoes' | 'auditoria' | 'admin' | 'arquitetura' | 'portal'
+
+export function podeVer(perfil: Perfil, area: Area): boolean {
+  const mapa: Record<Perfil, Area[]> = {
     admin_central: ['painel', 'cadastros', 'demandas', 'cotacoes', 'agendamentos', 'integracoes', 'auditoria', 'admin', 'arquitetura'],
     gestor:        ['painel', 'cadastros', 'demandas', 'cotacoes', 'agendamentos', 'integracoes', 'auditoria', 'arquitetura'],
     comprador:     ['painel', 'cadastros', 'demandas', 'cotacoes', 'arquitetura'],

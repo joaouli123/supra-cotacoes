@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { sessao } from '@/lib/sessao'
+import { exigir } from '@/lib/acesso'
 import { todos, um } from '@/lib/db'
 import { moeda, numero, data } from '@/lib/formato'
 import { Painel, Paginacao, CabecalhoPagina, Vazio, StatusTag, Tag } from '@/components/ui'
@@ -15,7 +15,7 @@ const ROTULO_ORIGEM: Record<string, string> = {
 }
 
 export default async function PaginaDemandas({ searchParams }: { searchParams: { [k: string]: string | undefined } }) {
-  const s = await sessao()
+  const s = await exigir('demandas')
   const eid = s.empresa?.id ?? null
   const q = (searchParams.q ?? '').trim()
   const origem = searchParams.origem ?? ''

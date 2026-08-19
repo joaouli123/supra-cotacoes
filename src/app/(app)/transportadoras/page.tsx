@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { sessao, filtroEmpresa } from '@/lib/sessao'
+import { exigir } from '@/lib/acesso'
+import { filtroEmpresa } from '@/lib/sessao'
 import { todos, um } from '@/lib/db'
 import { Painel, Paginacao, CabecalhoPagina, Vazio, Tag } from '@/components/ui'
 import { Filtros, TempoConsulta } from '@/components/Filtros'
@@ -9,7 +10,7 @@ export const dynamic = 'force-dynamic'
 const POR_PAGINA = 40
 
 export default async function PaginaTransportadoras({ searchParams }: { searchParams: { [k: string]: string | undefined } }) {
-  const s = await sessao()
+  const s = await exigir('cadastros')
   const eid = s.empresa?.id ?? null
   const q = (searchParams.q ?? '').trim()
   const modal = searchParams.modal ?? ''

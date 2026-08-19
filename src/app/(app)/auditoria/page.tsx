@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { sessao } from '@/lib/sessao'
+import { exigir } from '@/lib/acesso'
 import { todos, um } from '@/lib/db'
 import { numero, dataHora } from '@/lib/formato'
 import { Painel, Paginacao, CabecalhoPagina, Vazio, Tag, Kpi, GradeKpis, Aviso } from '@/components/ui'
@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic'
 const POR_PAGINA = 40
 
 export default async function PaginaAuditoria({ searchParams }: { searchParams: { [k: string]: string | undefined } }) {
-  const s = await sessao()
+  const s = await exigir('auditoria')
   const eid = s.empresa?.id ?? null
   const q = (searchParams.q ?? '').trim()
   const entidade = searchParams.entidade ?? ''

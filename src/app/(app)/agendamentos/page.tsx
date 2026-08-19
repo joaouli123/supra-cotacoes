@@ -1,4 +1,4 @@
-import { sessao } from '@/lib/sessao'
+import { exigir } from '@/lib/acesso'
 import { todos, um } from '@/lib/db'
 import { numero, dataHora, dataRelativa, dec } from '@/lib/formato'
 import { Painel, CabecalhoPagina, Vazio, Tag, Kpi, GradeKpis, Barra } from '@/components/ui'
@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 const DIAS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 
 export default async function PaginaAgendamentos() {
-  const s = await sessao()
+  const s = await exigir('agendamentos')
   const eid = s.empresa?.id ?? null
   const p = eid ? [eid] : []
   // Predicado sempre valido, com ou sem empresa no contexto

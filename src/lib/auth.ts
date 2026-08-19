@@ -41,8 +41,13 @@ export function conferirSenha(senha: string, guardado: string | null | undefined
 function segredo(): string {
   const s = process.env.SUPRA_SESSAO_SECRET
   if (s && s.length >= 16) return s
-  // Sem segredo configurado o sistema ainda roda (desenvolvimento local), mas
-  // os crachas nao sao portaveis entre instancias. Em producao defina a env.
+  // O repositorio e publico: segredo embutido no fonte nao e segredo. Em
+  // producao a falta da variavel derruba a rota, em vez de aceitar em
+  // silencio crachas forjados por quem leu o codigo. Fora de producao o
+  // sistema segue rodando, apenas sem crachas portaveis entre instancias.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('SUPRA_SESSAO_SECRET ausente ou com menos de 16 caracteres.')
+  }
   return 'supra-desenvolvimento-local-trocar-em-producao'
 }
 
@@ -82,4 +87,31 @@ export const OPCOES_COOKIE_SESSAO = {
   secure: process.env.NODE_ENV === 'production',
   path: '/',
   maxAge: DIAS_SESSAO * 86400,
+}
+
+/* ------------------------------------------------ valores assinados --- */
+/**
+ * Assina um valor curto que precisa viajar em cookie legivel pelo cliente.
+ * Usado pelo portal do fornecedor, onde a identidade nasce do token do
+ * convite e nao de um login: sem assinatura, o proprio navegador escolheria
+ * de qual fornecedor quer ver as cotacoes.
+ */
+export function assinarValor(valor: string): string {
+  return `${Buffer.from(valor).toString('base64url')}.${assinar(valor)}`
+}
+
+export function lerValor(token: string | undefined): string | null {
+  if (!token) return null
+  const corte = token.lastIndexOf('.')
+  if (corte < 1) return null
+  let corpo: string
+  try {
+    corpo = Buffer.from(token.slice(0, corte), 'base64url').toString()
+  } catch {
+    return null
+  }
+  const recebida = Buffer.from(token.slice(corte + 1))
+  const calculada = Buffer.from(assinar(corpo))
+  if (recebida.length !== calculada.length || !timingSafeEqual(recebida, calculada)) return null
+  return corpo
 }
