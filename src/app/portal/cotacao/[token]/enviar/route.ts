@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server'
 import { um, todos, executar, inserirRetornandoId, transacao } from '@/lib/db'
+import { redirecionar } from '@/lib/http'
 import { PRAZO_DE } from '@/lib/opcoes'
 
 /**
@@ -8,7 +8,6 @@ import { PRAZO_DE } from '@/lib/opcoes'
  * nao ha redigitacao pela equipe de compras.
  */
 export async function POST(req: Request, { params }: { params: { token: string } }) {
-  const url = new URL(req.url)
   const form = await req.formData()
 
   const convite = await um<{ id: number; cotacao_id: number; fornecedor_id: number; cot_status: string }>(
@@ -17,16 +16,16 @@ export async function POST(req: Request, { params }: { params: { token: string }
       where cf.token = ?`, [params.token])
 
   if (!convite) {
-    return NextResponse.redirect(new URL('/portal', url.origin))
+    return redirecionar('/portal')
   }
-  const destino = new URL(`/portal/cotacao/${params.token}`, url.origin)
+  const destino = `/portal/cotacao/${params.token}`
 
   // Nao aceita proposta em cotacao encerrada nem duplicidade de envio.
   const jaEnviou = await um<{ id: number }>(
     'select id from propostas where cotacao_id = ? and fornecedor_id = ?',
     [convite.cotacao_id, convite.fornecedor_id])
   if (jaEnviou || convite.cot_status !== 'em_andamento') {
-    return NextResponse.redirect(destino)
+    return redirecionar(destino)
   }
 
   const itens = await todos<{ id: number }>(
@@ -45,8 +44,7 @@ export async function POST(req: Request, { params }: { params: { token: string }
   // Precisa haver ao menos um item com preco valido.
   const ofertados = itens.filter((it) => form.get(`disp_${it.id}`) === '1' && num(`preco_${it.id}`) > 0)
   if (ofertados.length === 0) {
-    destino.searchParams.set('erro', 'sem-precos')
-    return NextResponse.redirect(destino)
+    return redirecionar(`${destino}?erro=sem-precos`)
   }
 
   await transacao(async () => {
@@ -77,6 +75,5 @@ export async function POST(req: Request, { params }: { params: { token: string }
       [agora, convite.id])
   })
 
-  destino.searchParams.set('enviada', '1')
-  return NextResponse.redirect(destino, { status: 303 })
+  return redirecionar(`${destino}?enviada=1`)
 }

@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server'
 import { um } from '@/lib/db'
+import { caminhoInterno, redirecionar } from '@/lib/http'
 import { COOKIE_SESSAO, OPCOES_COOKIE_SESSAO, assinarCracha, conferirSenha } from '@/lib/auth'
 
 /** Formulario nativo (method=post): funciona sem JavaScript no cliente. */
@@ -21,16 +21,13 @@ function excedeu(ip: string): boolean {
 }
 
 export async function POST(req: Request) {
-  const url = new URL(req.url)
   const form = await req.formData()
   const email = String(form.get('email') ?? '').trim()
   const senha = String(form.get('senha') ?? '')
-  const bruto = String(form.get('voltar') ?? '/painel')
-  const voltar = bruto.startsWith('/') && !bruto.startsWith('//') ? bruto : '/painel'
+  const voltar = caminhoInterno(String(form.get('voltar') ?? ''), '/painel')
 
   const falha = (motivo: string) =>
-    NextResponse.redirect(
-      new URL(`/entrar?erro=${motivo}&voltar=${encodeURIComponent(voltar)}`, url.origin), 303)
+    redirecionar(`/entrar?erro=${motivo}&voltar=${encodeURIComponent(voltar)}`)
 
   if (!email || !senha) return falha('vazio')
 
@@ -47,7 +44,7 @@ export async function POST(req: Request) {
 
   TENTATIVAS.delete(ip)
 
-  const res = NextResponse.redirect(new URL(voltar, url.origin), 303)
+  const res = redirecionar(voltar)
   res.cookies.set(COOKIE_SESSAO, assinarCracha(u.id), OPCOES_COOKIE_SESSAO)
   // O perfil fica em cookie legivel porque a interface alterna de contexto por
   // ele; a autoridade continua sendo o cracha assinado, conferido no servidor.

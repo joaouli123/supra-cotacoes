@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server'
 import { um } from '@/lib/db'
+import { redirecionar } from '@/lib/http'
 
 /**
  * Entrada no portal externo a partir de um token de convite.
@@ -13,9 +13,9 @@ export async function GET(req: Request) {
 
   const convite = await um<{ fornecedor_id: number }>(
     'select fornecedor_id from cotacao_fornecedores where token = ?', [token])
-  if (!convite) return NextResponse.redirect(new URL('/portal', url.origin))
+  if (!convite) return redirecionar('/portal', 302)
 
-  const res = NextResponse.redirect(new URL(`/portal/cotacao/${token}`, url.origin))
+  const res = redirecionar(`/portal/cotacao/${token}`, 302)
   const opcoes = { httpOnly: false, sameSite: 'lax' as const, path: '/', maxAge: 60 * 60 * 24 * 30 }
   res.cookies.set('supra_perfil', 'fornecedor', opcoes)
   res.cookies.set('supra_fornecedor', String(convite.fornecedor_id), opcoes)

@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server'
 import { usuarioAutenticado } from '@/lib/sessao'
+import { caminhoInterno, redirecionar } from '@/lib/http'
 
 /**
  * Troca de contexto (empresa ativa e perfil de acesso).
@@ -11,14 +11,12 @@ import { usuarioAutenticado } from '@/lib/sessao'
 export async function GET(req: Request) {
   const url = new URL(req.url)
   const atual = await usuarioAutenticado()
-  if (!atual) return NextResponse.redirect(new URL('/entrar', url.origin))
+  if (!atual) return redirecionar('/entrar', 302)
 
   const empresa = url.searchParams.get('empresa')
   const perfil = url.searchParams.get('perfil')
-  const voltar = url.searchParams.get('voltar') || '/painel'
-
-  const destino = voltar.startsWith('/') && !voltar.startsWith('//') ? voltar : '/painel'
-  const res = NextResponse.redirect(new URL(destino, url.origin))
+  const destino = caminhoInterno(url.searchParams.get('voltar'), '/painel')
+  const res = redirecionar(destino, 302)
   const opcoes = { httpOnly: false, sameSite: 'lax' as const, path: '/', maxAge: 60 * 60 * 24 * 7 }
 
   const ehAdmin = atual.perfil === 'admin_central'
