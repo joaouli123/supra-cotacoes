@@ -7,7 +7,11 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+# --include=dev e obrigatorio: o Coolify injeta as variaveis da aplicacao como
+# ARG antes deste passo, e um NODE_ENV=production faria o npm pular as
+# devDependencies. Sem typescript instalado o Next ignora os paths do tsconfig
+# e todo import @/... quebra no build.
+RUN npm ci --include=dev --no-audit --no-fund
 
 # ---------- build ----------
 FROM node:22-alpine AS builder
