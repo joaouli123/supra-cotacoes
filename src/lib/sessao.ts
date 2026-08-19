@@ -1,5 +1,7 @@
 import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
 import { um, todos } from './db'
+import { COOKIE_SESSAO, lerCracha } from './auth'
 
 export type Perfil = 'admin_central' | 'gestor' | 'comprador' | 'fornecedor'
 
@@ -12,7 +14,12 @@ export type Usuario = {
   nome: string; email: string; cargo: string; perfil: Perfil
 }
 export type Sessao = {
+  /** Usuario exibido na tela: o autenticado, ou um representante do perfil simulado. */
   usuario: Usuario
+  /** Quem de fato entrou com e-mail e senha. Nulo apenas no portal do fornecedor. */
+  autenticado: Usuario | null
+  /** Verdadeiro quando o administrador esta vendo a plataforma por outro perfil. */
+  simulando: boolean
   empresa: Empresa | null
   fornecedor: { id: number; razao_social: string; nome_fantasia: string; cnpj: string } | null
   perfil: Perfil
@@ -35,16 +42,41 @@ async function usuarioPadrao(perfil: Perfil): Promise<Usuario> {
   return u
 }
 
-export async function sessao(): Promise<Sessao> {
-  const c = cookies()
-  const perfil = (c.get('supra_perfil')?.value ?? 'gestor') as Perfil
-  const idUsuario = Number(c.get('supra_usuario')?.value ?? 0)
+const PERFIS: Perfil[] = ['admin_central', 'gestor', 'comprador', 'fornecedor']
 
-  let usuario = idUsuario
-    ? await um<Usuario>(`select id, empresa_id, fornecedor_id, nome, email, cargo, perfil
-                           from usuarios where id = ?`, [idUsuario])
-    : undefined
-  if (!usuario || usuario.perfil !== perfil) usuario = await usuarioPadrao(perfil)
+/** Usuario do cracha assinado. E a unica fonte de identidade confiavel. */
+export async function usuarioAutenticado(): Promise<Usuario | null> {
+  const id = lerCracha(cookies().get(COOKIE_SESSAO)?.value)
+  if (!id) return null
+  return (await um<Usuario>(
+    `select id, empresa_id, fornecedor_id, nome, email, cargo, perfil
+       from usuarios where id = ? and ativo = 1`, [id])) ?? null
+}
+
+/**
+ * Contexto da requisicao.
+ *
+ * Por padrao exige sessao autenticada e redireciona para a tela de entrada.
+ * O portal externo passa `publico: true`: la quem identifica o fornecedor e o
+ * token do convite, que e a propria credencial, sem login.
+ */
+export async function sessao(opcoes: { publico?: boolean } = {}): Promise<Sessao> {
+  const c = cookies()
+  const autenticado = await usuarioAutenticado()
+
+  if (!autenticado && !opcoes.publico) redirect('/entrar')
+
+  const pedido = c.get('supra_perfil')?.value as Perfil | undefined
+  const desejado = pedido && PERFIS.includes(pedido) ? pedido : undefined
+
+  // Somente o administrador da plataforma enxerga por outro perfil; os demais
+  // ficam presos ao proprio, independentemente do cookie.
+  const perfil: Perfil = autenticado
+    ? (autenticado.perfil === 'admin_central' ? desejado ?? 'admin_central' : autenticado.perfil)
+    : desejado ?? 'fornecedor'
+
+  const simulando = !!autenticado && perfil !== autenticado.perfil
+  const usuario = autenticado && !simulando ? autenticado : await usuarioPadrao(perfil)
 
   // O administrador central pode navegar por qualquer empresa (troca de contexto).
   const idEmpresaCookie = Number(c.get('supra_empresa')?.value ?? 0)
@@ -64,7 +96,7 @@ export async function sessao(): Promise<Sessao> {
         [idFornecedor])) ?? null
     : null
 
-  return { usuario, empresa, fornecedor, perfil }
+  return { usuario, autenticado, simulando, empresa, fornecedor, perfil }
 }
 
 export async function empresas(): Promise<Empresa[]> {

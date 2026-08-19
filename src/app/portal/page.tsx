@@ -8,7 +8,7 @@ import { IconeSeta, IconeAlerta, IconeCotacao, IconeCheck, IconeEnvio, IconeGraf
 export const dynamic = 'force-dynamic'
 
 export default async function PortalInicio() {
-  const s = await sessao()
+  const s = await sessao({ publico: true })
   if (!s.fornecedor) {
     return (
       <>

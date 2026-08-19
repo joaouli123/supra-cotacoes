@@ -41,6 +41,7 @@ create table usuarios (
   perfil        text    not null check (perfil in ('admin_central','gestor','comprador','fornecedor')),
   telefone      text,
   ativo         integer not null default 1,
+  senha_hash    text,
   ultimo_acesso text
 );
 create index ix_usuarios_empresa on usuarios(empresa_id);

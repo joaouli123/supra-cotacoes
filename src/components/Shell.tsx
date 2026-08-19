@@ -5,7 +5,7 @@ import { iniciais } from '@/lib/formato'
 import {
   IconePainel, IconeCaixa, IconeFabrica, IconePessoas, IconeCaminhao, IconeLista,
   IconeBalanca, IconeRelogio, IconeConector, IconeEscudo, IconePredio, IconeChevron,
-  IconeArquitetura, IconePorta, IconeCheck,
+  IconeArquitetura, IconePorta, IconeCheck, IconeCadeado,
 } from './icones'
 
 function secoesPara(perfil: Perfil): SecaoNav[] {
@@ -55,7 +55,8 @@ export async function Shell({ children }: { children: React.ReactNode }) {
   const s = await sessao()
   const listaEmpresas = await empresas()
   const secoes = secoesPara(s.perfil)
-  const podeTrocarEmpresa = s.perfil === 'admin_central'
+  const ehAdmin = s.autenticado?.perfil === 'admin_central'
+  const podeTrocarEmpresa = ehAdmin
 
   return (
     <div className="min-h-screen bg-ink-50">
@@ -71,10 +72,12 @@ export async function Shell({ children }: { children: React.ReactNode }) {
           <Navegacao secoes={secoes} />
         </div>
         <div className="border-t border-ink-200 p-3 shrink-0">
-          <Link href="/" className="nav-item">
-            <span className="text-ink-400"><IconePorta size={16} /></span>
-            <span>Trocar perfil</span>
-          </Link>
+          <form method="post" action="/api/sair">
+            <button type="submit" className="nav-item w-full text-left">
+              <span className="text-ink-400"><IconePorta size={16} /></span>
+              <span>Sair</span>
+            </button>
+          </form>
         </div>
       </aside>
 
@@ -131,6 +134,13 @@ export async function Shell({ children }: { children: React.ReactNode }) {
             </details>
           )}
 
+          {s.simulando && (
+            <span className="hidden sm:flex items-center gap-1.5 h-7 px-2 rounded border border-caution-100
+                             bg-caution-100 text-caution-700 text-2xs font-medium shrink-0">
+              Vendo como {ROTULO_PERFIL[s.perfil].toLowerCase()}
+            </span>
+          )}
+
           <div className="flex-1" />
 
           {/* usuario da sessao */}
@@ -151,23 +161,45 @@ export async function Shell({ children }: { children: React.ReactNode }) {
             <div className="absolute right-0 top-full mt-1.5 w-[290px] max-w-[88vw] bg-white border border-ink-200
                             rounded-lg shadow-pop py-1.5 z-30">
               <div className="px-3 py-2 border-b border-ink-100">
-                <p className="text-sm font-medium text-ink-900 truncate">{s.usuario.nome}</p>
-                <p className="text-xs text-ink-500 truncate">{s.usuario.email}</p>
-                <p className="mt-1.5 text-2xs text-petrol-800 bg-petrol-100 inline-block px-1.5 py-0.5 rounded">
-                  {ROTULO_PERFIL[s.perfil]}
+                <p className="text-sm font-medium text-ink-900 truncate">
+                  {s.autenticado?.nome ?? s.usuario.nome}
                 </p>
+                <p className="text-xs text-ink-500 truncate">
+                  {s.autenticado?.email ?? s.usuario.email}
+                </p>
+                <p className="mt-1.5 text-2xs text-petrol-800 bg-petrol-100 inline-block px-1.5 py-0.5 rounded">
+                  {ROTULO_PERFIL[s.autenticado?.perfil ?? s.perfil]}
+                </p>
+                {s.simulando && (
+                  <p className="mt-1.5 text-2xs text-ink-500">
+                    Navegando como <strong className="font-medium text-ink-700">{s.usuario.nome}</strong>,
+                    {' '}{ROTULO_PERFIL[s.perfil].toLowerCase()}.
+                  </p>
+                )}
               </div>
-              <p className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-ink-400">
-                Alternar perfil de acesso
-              </p>
-              {(['admin_central', 'gestor', 'comprador', 'fornecedor'] as Perfil[]).map((p) => (
-                <a key={p} href={`/api/contexto?perfil=${p}&voltar=${p === 'fornecedor' ? '/portal' : '/painel'}`}
-                   className={`flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-ink-50
-                               ${p === s.perfil ? 'text-ink-900 font-medium' : 'text-ink-600'}`}>
-                  {ROTULO_PERFIL[p]}
-                  {p === s.perfil && <IconeCheck size={15} className="text-petrol-700 shrink-0" />}
-                </a>
-              ))}
+
+              {ehAdmin && (
+                <>
+                  <p className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-ink-400">
+                    Alternar perfil de acesso
+                  </p>
+                  {(['admin_central', 'gestor', 'comprador', 'fornecedor'] as Perfil[]).map((p) => (
+                    <a key={p} href={`/api/contexto?perfil=${p}&voltar=${p === 'fornecedor' ? '/portal' : '/painel'}`}
+                       className={`flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-ink-50
+                                   ${p === s.perfil ? 'text-ink-900 font-medium' : 'text-ink-600'}`}>
+                      {ROTULO_PERFIL[p]}
+                      {p === s.perfil && <IconeCheck size={15} className="text-petrol-700 shrink-0" />}
+                    </a>
+                  ))}
+                </>
+              )}
+
+              <form method="post" action="/api/sair" className="border-t border-ink-100 mt-1.5 pt-1.5">
+                <button type="submit"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-sm text-ink-600 hover:bg-ink-50">
+                  <IconeCadeado size={14} className="text-ink-400" />Encerrar sessão
+                </button>
+              </form>
             </div>
           </details>
         </header>

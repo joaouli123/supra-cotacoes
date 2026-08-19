@@ -33,6 +33,7 @@ const PERFIS = [
     resumo: 'Portal externo: recebe o convite, consulta a cotação e envia a proposta sem acessar o sistema interno.',
     acessos: ['Somente as próprias cotações', 'Envio de proposta', 'Isolado da base interna'],
     destino: '/portal',
+    externo: true,
   },
 ]
 
@@ -77,8 +78,8 @@ export default async function Entrada() {
             <span className="w-7 h-7 rounded bg-ink-900 text-white grid place-items-center text-xs font-bold">S</span>
             <span className="text-sm font-semibold tracking-tight">SUPRA</span>
           </div>
-          <Link href="/arquitetura" className="btn btn-secundario btn-sm">
-            <IconeArquitetura size={14} />Nota de arquitetura
+          <Link href="/entrar" className="btn btn-primario btn-sm">
+            <IconeUsuario size={14} />Entrar
           </Link>
         </header>
 
@@ -105,15 +106,15 @@ export default async function Entrada() {
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-2.5">
-              <a href="/api/contexto?perfil=gestor&voltar=/painel" className="btn btn-primario">
-                Entrar como gestor de suprimentos
+              <Link href="/entrar" className="btn btn-primario">
+                Entrar na plataforma
                 <IconeSeta size={15} />
-              </a>
+              </Link>
               {cotacaoDestaque && (
-                <a href={`/api/contexto?perfil=gestor&voltar=/cotacoes/${cotacaoDestaque.id}/equalizacao`}
-                   className="btn btn-secundario">
+                <Link href={`/entrar?voltar=/cotacoes/${cotacaoDestaque.id}/equalizacao`}
+                      className="btn btn-secundario">
                   Ver uma equalização pronta
-                </a>
+                </Link>
               )}
             </div>
           </div>
@@ -150,7 +151,7 @@ export default async function Entrada() {
           <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
             {PERFIS.map((p) => (
               <a key={p.perfil}
-                 href={`/api/contexto?perfil=${p.perfil}&voltar=${p.destino}`}
+                 href={'externo' in p && p.externo ? p.destino : `/entrar?voltar=${p.destino}`}
                  className="painel p-4 sm:p-5 hover:border-ink-400 hover:shadow-subtle transition-all duration-100 group flex flex-col">
                 <h3 className="text-sm font-semibold text-ink-900 flex items-center gap-2">
                   <span className="text-ink-400">{ICONES_PERFIL[p.perfil]}</span>{p.titulo}
@@ -164,7 +165,7 @@ export default async function Entrada() {
                   ))}
                 </ul>
                 <span className="mt-4 text-xs font-medium text-ink-900 flex items-center gap-1.5 group-hover:gap-2.5 transition-all">
-                  Acessar <IconeSeta size={13} />
+                  {'externo' in p && p.externo ? 'Abrir portal' : 'Entrar'} <IconeSeta size={13} />
                 </span>
               </a>
             ))}

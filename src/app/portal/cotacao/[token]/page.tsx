@@ -29,7 +29,7 @@ export default async function PortalCotacao({
 
   // O token manda: se a sessao aponta para outro fornecedor, reentra pela porta
   // do portal para alinhar identificacao e dados.
-  const atual = await sessao()
+  const atual = await sessao({ publico: true })
   if (atual.fornecedor?.id !== convite.fornecedor_id) {
     redirect(`/api/portal?token=${params.token}`)
   }

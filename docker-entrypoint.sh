@@ -5,30 +5,61 @@ set -e
 if [ -n "$DATABASE_URL" ]; then
   echo "[supra] PostgreSQL configurado."
 
-  JA_TEM=$(node -e "
-    const pg=require('pg');
-    const c=new pg.Client({connectionString:process.env.DATABASE_URL,
-      ssl:process.env.DATABASE_SSL==='true'?{rejectUnauthorized:false}:undefined});
-    c.connect()
-      .then(()=>c.query(\"select count(*)::int c from information_schema.tables where table_schema='public' and table_name='empresas'\"))
-      .then(r=>c.query(r.rows[0].c?'select count(*)::int c from empresas':'select 0 c'))
-      .then(r=>{console.log(r.rows[0].c);return c.end()})
-      .catch(()=>{console.log('0');process.exit(0)});
-  " 2>/dev/null || echo 0)
+  # Sonda de estado da base. Imprime exatamente uma palavra:
+  #   VAZIA        conectou e nao ha dados
+  #   CHEIA:<n>    conectou e ja existem n empresas
+  #   ERRO         nao conseguiu conectar dentro das tentativas
+  #
+  # A distincao importa: o seed do Postgres roda "drop schema public cascade".
+  # Tratar falha de conexao como "base vazia" apagaria a base de producao a
+  # cada deploy — por isso ERRO interrompe a subida em vez de carregar.
+  ESTADO=$(node -e "
+    const pg = require('pg');
+    const espera = (ms) => new Promise((r) => setTimeout(r, ms));
+    (async () => {
+      for (let tentativa = 1; tentativa <= 10; tentativa++) {
+        const c = new pg.Client({
+          connectionString: process.env.DATABASE_URL,
+          ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
+          connectionTimeoutMillis: 5000,
+        });
+        try {
+          await c.connect();
+          const t = await c.query(\"select count(*)::int c from information_schema.tables where table_schema='public' and table_name='empresas'\");
+          const n = t.rows[0].c ? (await c.query('select count(*)::int c from empresas')).rows[0].c : 0;
+          await c.end();
+          console.log(n > 0 ? 'CHEIA:' + n : 'VAZIA');
+          return;
+        } catch (e) {
+          try { await c.end(); } catch {}
+          process.stderr.write('[supra] postgres indisponivel (' + tentativa + '/10): ' + e.message + '\n');
+          await espera(3000);
+        }
+      }
+      console.log('ERRO');
+    })();
+  ") || ESTADO=ERRO
 
-  if [ "$JA_TEM" = "0" ] || [ -z "$JA_TEM" ]; then
-    if [ "$SUPRA_SEED_ON_BOOT" = "false" ]; then
-      echo "[supra] Base vazia, mas SUPRA_SEED_ON_BOOT=false — seguindo sem carregar."
-    else
-      echo "[supra] Base vazia. Gerando a massa de demonstração..."
-      node --no-warnings scripts/seed.mjs
-      echo "[supra] Copiando para o PostgreSQL..."
-      node --no-warnings scripts/seed-postgres.mjs
-      echo "[supra] Base pronta."
-    fi
-  else
-    echo "[supra] Base já contém $JA_TEM empresas — carga ignorada."
-  fi
+  case "$ESTADO" in
+    ERRO|'')
+      echo "[supra] Nao foi possivel falar com o PostgreSQL. Abortando para nao arriscar a base."
+      exit 1
+      ;;
+    CHEIA:*)
+      echo "[supra] Base ja contem ${ESTADO#CHEIA:} empresas — carga ignorada."
+      ;;
+    VAZIA)
+      if [ "$SUPRA_SEED_ON_BOOT" = "false" ]; then
+        echo "[supra] Base vazia, mas SUPRA_SEED_ON_BOOT=false — seguindo sem carregar."
+      else
+        echo "[supra] Base vazia. Gerando a massa de demonstração..."
+        node --no-warnings scripts/seed.mjs
+        echo "[supra] Copiando para o PostgreSQL..."
+        node --no-warnings scripts/seed-postgres.mjs
+        echo "[supra] Base pronta."
+      fi
+      ;;
+  esac
 else
   echo "[supra] Sem DATABASE_URL: usando SQLite local."
   if [ ! -f data/supra.db ]; then
@@ -36,5 +67,9 @@ else
     node --no-warnings scripts/seed.mjs
   fi
 fi
+
+# Idempotente: garante a coluna de senha e aplica a conta administrativa por
+# cima da base existente, a cada subida.
+node --no-warnings scripts/migrar-auth.mjs
 
 exec "$@"

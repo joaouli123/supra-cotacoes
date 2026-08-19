@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
  * o fornecedor nao ve navegacao, cadastros nem qualquer dado de outras empresas.
  */
 export default async function LayoutPortal({ children }: { children: React.ReactNode }) {
-  const s = await sessao()
+  const s = await sessao({ publico: true })
   return (
     <div className="min-h-screen bg-ink-50">
       <header className="h-14 bg-white border-b border-ink-200 sticky top-0 z-20">
