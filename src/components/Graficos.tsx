@@ -6,9 +6,9 @@
 // pintado: a pagina de relatorios abre sem script nenhum, imprime bem e
 // funciona igual num desktop do escritorio e num celular de obra.
 //
-// Todo componente recebe dados prontos e devolve <svg> com viewBox: a
-// escala e feita pelo proprio navegador, entao o mesmo grafico serve para
-// a coluna estreita e para a tela cheia sem recalcular nada.
+// Todo componente recebe dados prontos e uma altura em pixels. So a largura
+// acompanha o container: um grafico de 180 px continua com 180 px de altura
+// tanto na coluna estreita quanto no painel que ocupa a tela inteira.
 // =====================================================================
 import type { ReactNode } from 'react'
 
@@ -18,21 +18,55 @@ export const CORES = ['#14544A', '#CA8A04', '#B91C1C', '#525252', '#1A6A5D', '#A
 const eixo = '#E5E5E5'
 const tinta = '#737373'
 
-/** Caminho suavizado por Catmull-Rom convertido em Bezier cubica. */
+/**
+ * Caminho suavizado por spline cubica monotona (Fritsch-Carlson).
+ *
+ * Catmull-Rom, que estava aqui antes, projeta a tangente de um ponto usando os
+ * vizinhos, e por isso ultrapassa o valor mais alto da serie entre dois pontos:
+ * o desenho subia acima do teto da escala e o SVG aparava a lombada no topo.
+ * A versao monotona limita a tangente ao que os dois extremos do trecho
+ * permitem — a curva continua macia, mas nunca passa do ponto mais alto nem
+ * mergulha abaixo do mais baixo.
+ */
 function curva(pts: Array<[number, number]>): string {
   if (pts.length === 0) return ''
   if (pts.length < 3) return pts.map((p, i) => `${i ? 'L' : 'M'}${p[0]},${p[1]}`).join(' ')
-  let d = `M${pts[0][0]},${pts[0][1]}`
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[i - 1] ?? pts[i]
-    const p1 = pts[i]
-    const p2 = pts[i + 1]
-    const p3 = pts[i + 2] ?? p2
-    const c1x = p1[0] + (p2[0] - p0[0]) / 6
-    const c1y = p1[1] + (p2[1] - p0[1]) / 6
-    const c2x = p2[0] - (p3[0] - p1[0]) / 6
-    const c2y = p2[1] - (p3[1] - p1[1]) / 6
-    d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`
+
+  const n = pts.length
+  const h: number[] = []   // largura de cada trecho
+  const s: number[] = []   // inclinacao de cada trecho
+  for (let i = 0; i < n - 1; i++) {
+    h[i] = pts[i + 1][0] - pts[i][0]
+    s[i] = h[i] === 0 ? 0 : (pts[i + 1][1] - pts[i][1]) / h[i]
+  }
+
+  // Tangente inicial de cada ponto: media das inclinacoes vizinhas.
+  const m: number[] = [s[0]]
+  for (let i = 1; i < n - 1; i++) m[i] = (s[i - 1] + s[i]) / 2
+  m[n - 1] = s[n - 2]
+
+  for (let i = 0; i < n - 1; i++) {
+    // Trecho plano trava as duas pontas: sem isso a curva inventa uma barriga
+    // onde os dois valores sao iguais.
+    if (s[i] === 0) { m[i] = 0; m[i + 1] = 0; continue }
+    const a = m[i] / s[i]
+    const b = m[i + 1] / s[i]
+    const q = Math.hypot(a, b)
+    if (q > 3) {
+      const t = 3 / q
+      m[i] = t * a * s[i]
+      m[i + 1] = t * b * s[i]
+    }
+  }
+
+  const f = (v: number) => v.toFixed(2)
+  let d = `M${f(pts[0][0])},${f(pts[0][1])}`
+  for (let i = 0; i < n - 1; i++) {
+    const c1x = pts[i][0] + h[i] / 3
+    const c1y = pts[i][1] + (m[i] * h[i]) / 3
+    const c2x = pts[i + 1][0] - h[i] / 3
+    const c2y = pts[i + 1][1] - (m[i + 1] * h[i]) / 3
+    d += ` C${f(c1x)},${f(c1y)} ${f(c2x)},${f(c2y)} ${f(pts[i + 1][0])},${f(pts[i + 1][1])}`
   }
   return d
 }
@@ -45,15 +79,91 @@ function teto(max: number): number {
   return 10 * p
 }
 
+/* ============================================================== escala == */
+//
+// A altura de um grafico e dada em pixels e respeitada ao pe da letra. Parece
+// obvio, mas era justamente o que faltava: um <svg viewBox> com "h-auto"
+// preserva a *proporcao*, nao a altura — o mesmo desenho de 640x210 que ficava
+// certo numa coluna de 640 px esticava para 490 px de altura no painel largo,
+// e a fonte 10 do rotulo era ampliada 2,3 vezes junto.
+//
+// Aqui a largura e a unica coisa que acompanha o container. Grade, eixos e
+// rotulos sao HTML posicionado em pixel; so a mancha da serie e SVG, esticada
+// de proposito no eixo X com preserveAspectRatio="none".
+
+/** Frações do teto que ganham linha de grade e rótulo no eixo Y. */
+const NIVEIS = [1, 0.5, 0] as const
+
+/** Rótulos do eixo Y, cada um centrado na sua linha de grade. */
+function EixoY({ alto, formatar, topo, zona, largura }: {
+  alto: number
+  formatar: (v: number) => string
+  topo: number
+  zona: number
+  largura: number
+}) {
+  return (
+    <div className="relative shrink-0" style={{ width: largura }}>
+      {NIVEIS.map((n) => (
+        <span key={n} style={{ top: topo + zona * (1 - n) }}
+              className="absolute right-0 -translate-y-1/2 text-2xs text-ink-400 tabular whitespace-nowrap">
+          {formatar(alto * n)}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function Grade({ topo, zona }: { topo: number; zona: number }) {
+  return (
+    <>
+      {NIVEIS.map((n) => (
+        <div key={n} aria-hidden style={{ top: topo + zona * (1 - n) }}
+             className={`absolute inset-x-0 border-t ${n === 0 ? 'border-ink-200' : 'border-dashed border-ink-200'}`} />
+      ))}
+    </>
+  )
+}
+
+/** Rótulos do eixo X, ancorados na mesma fração de largura usada no desenho. */
+function EixoX({ dados, posicao, recuo, centrado = false }: {
+  dados: PontoSerie[]
+  posicao: (i: number) => number
+  recuo: number
+  /** Colunas: o rótulo fica centrado na barra, inclusive nas pontas. Numa
+   *  série de linha o primeiro e o último ponto encostam na borda, e ali o
+   *  rótulo tem de encostar junto para não vazar do painel. */
+  centrado?: boolean
+}) {
+  // Em série longa só alguns rótulos cabem sem encavalar.
+  const passo = Math.max(1, Math.ceil(dados.length / 8))
+  const ponta = (i: number) =>
+    centrado || (i > 0 && i < dados.length - 1) ? '-50%' : i === 0 ? '0%' : '-100%'
+
+  return (
+    <div className="flex gap-2 mt-2">
+      <div className="shrink-0" style={{ width: recuo }} />
+      <div className="relative flex-1 min-w-0 h-4">
+        {dados.map((d, i) => (i % passo === 0 || i === dados.length - 1) && (
+          <span key={i} style={{ left: `${posicao(i)}%`, transform: `translateX(${ponta(i)})` }}
+                className="absolute top-0 text-2xs text-ink-500 whitespace-nowrap">
+            {d.rotulo}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /* ============================================================ area/linha == */
 
 export type PontoSerie = { rotulo: string; valor: number }
 
 /**
- * Serie temporal com area preenchida.
+ * Série temporal com área preenchida.
  * `formatar` decide como o eixo Y aparece — moeda, contagem, percentual.
  */
-export function GraficoArea({ dados, formatar, cor = CORES[0], altura = 190 }: {
+export function GraficoArea({ dados, formatar, cor = CORES[0], altura = 180 }: {
   dados: PontoSerie[]
   formatar: (v: number) => string
   cor?: string
@@ -61,60 +171,63 @@ export function GraficoArea({ dados, formatar, cor = CORES[0], altura = 190 }: {
 }) {
   if (dados.length === 0) return <SemDados altura={altura} />
 
-  const L = 8, R = 8, T = 10, B = 26
-  const W = 640, H = altura
+  const TOPO = 10, RECUO = 62
+  const zona = altura - TOPO
   const alto = teto(Math.max(...dados.map((d) => d.valor)))
-  const larg = W - L - R
-  const dispY = H - T - B
 
-  const x = (i: number) => L + (dados.length === 1 ? larg / 2 : (i * larg) / (dados.length - 1))
-  const y = (v: number) => T + dispY - (v / alto) * dispY
+  // Percentual: serve tanto para o SVG esticado quanto para o CSS dos pontos.
+  const px = (i: number) => (dados.length === 1 ? 50 : (i * 100) / (dados.length - 1))
+  const py = (v: number) => 100 - (v / alto) * 100
 
-  const pts = dados.map((d, i) => [x(i), y(d.valor)] as [number, number])
+  const pts = dados.map((d, i) => [px(i), py(d.valor)] as [number, number])
   const linha = curva(pts)
-  const area = `${linha} L${x(dados.length - 1)},${T + dispY} L${x(0)},${T + dispY} Z`
-  const grade = [0, 0.25, 0.5, 0.75, 1]
+  const area = `${linha} L${px(dados.length - 1)},100 L${px(0)},100 Z`
   const id = `g${cor.replace('#', '')}`
-
-  // Em series longas so alguns rotulos cabem sem sobrepor.
-  const passo = Math.max(1, Math.ceil(dados.length / 7))
 
   return (
     <div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img"
-           aria-label={`Série de ${dados.length} pontos, máximo ${formatar(alto)}`}>
-        <defs>
-          <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={cor} stopOpacity="0.18" />
-            <stop offset="100%" stopColor={cor} stopOpacity="0.02" />
-          </linearGradient>
-        </defs>
+      <div className="flex gap-2" style={{ height: altura }}>
+        <EixoY alto={alto} formatar={formatar} topo={TOPO} zona={zona} largura={RECUO} />
 
-        {grade.map((g) => (
-          <line key={g} x1={L} x2={W - R} y1={T + dispY * g} y2={T + dispY * g}
-                stroke={eixo} strokeWidth="1" strokeDasharray={g === 1 ? undefined : '3 4'} />
-        ))}
+        <div className="relative flex-1 min-w-0">
+          <Grade topo={TOPO} zona={zona} />
 
-        <path d={area} fill={`url(#${id})`} />
-        <path d={linha} fill="none" stroke={cor} strokeWidth="2"
-              strokeLinecap="round" strokeLinejoin="round" />
+          {/* O eixo X estica com a coluna; a espessura do traço, não —
+              por isso o vectorEffect. */}
+          <svg style={{ top: TOPO, height: zona }} className="absolute inset-x-0 w-full overflow-visible" role="img"
+               viewBox="0 0 100 100" preserveAspectRatio="none"
+               aria-label={`Série de ${dados.length} pontos, máximo ${formatar(alto)}`}>
+            <defs>
+              <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={cor} stopOpacity="0.16" />
+                <stop offset="100%" stopColor={cor} stopOpacity="0.02" />
+              </linearGradient>
+            </defs>
+            <path d={area} fill={`url(#${id})`} />
+            <path d={linha} fill="none" stroke={cor} strokeWidth="2" vectorEffect="non-scaling-stroke"
+                  strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
 
-        {pts.map((p, i) => (
-          <circle key={i} cx={p[0]} cy={p[1]} r={i === pts.length - 1 ? 3.5 : 2}
-                  fill={i === pts.length - 1 ? cor : '#FFFFFF'} stroke={cor} strokeWidth="1.5" />
-        ))}
-
-        {dados.map((d, i) => (i % passo === 0 || i === dados.length - 1) && (
-          <text key={i} x={x(i)} y={H - 8} fontSize="10" fill={tinta}
-                textAnchor={i === 0 ? 'start' : i === dados.length - 1 ? 'end' : 'middle'}>
-            {d.rotulo}
-          </text>
-        ))}
-      </svg>
-
-      <div className="flex justify-between text-2xs text-ink-500 tabular px-1">
-        <span>0</span><span>{formatar(alto)}</span>
+          {/* Ponto em HTML: dentro do SVG esticado ele viraria elipse. */}
+          {dados.map((d, i) => {
+            const fim = i === dados.length - 1
+            return (
+              <span key={i} aria-hidden
+                    style={{
+                      left: `${px(i)}%`,
+                      top: TOPO + zona * (py(d.valor) / 100),
+                      width: fim ? 9 : 6,
+                      height: fim ? 9 : 6,
+                      backgroundColor: fim ? cor : '#FFFFFF',
+                      boxShadow: `0 0 0 1.5px ${cor}`,
+                    }}
+                    className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full" />
+            )
+          })}
+        </div>
       </div>
+
+      <EixoX dados={dados} posicao={px} recuo={RECUO} />
     </div>
   )
 }
@@ -122,7 +235,7 @@ export function GraficoArea({ dados, formatar, cor = CORES[0], altura = 190 }: {
 /* ================================================================ colunas = */
 
 /** Colunas verticais — bom para contagens por período. */
-export function GraficoColunas({ dados, formatar, cor = CORES[0], altura = 190 }: {
+export function GraficoColunas({ dados, formatar, cor = CORES[0], altura = 180 }: {
   dados: PontoSerie[]
   formatar: (v: number) => string
   cor?: string
@@ -130,37 +243,43 @@ export function GraficoColunas({ dados, formatar, cor = CORES[0], altura = 190 }
 }) {
   if (dados.length === 0) return <SemDados altura={altura} />
 
-  const W = 640, H = altura, T = 14, B = 28, L = 6, R = 6
-  const dispY = H - T - B
+  // A faixa do topo é reservada para o valor escrito acima da coluna mais
+  // alta; sem ela, a coluna que encosta no teto empurra o número para fora.
+  const TOPO = 20, RECUO = 34
+  const zona = altura - TOPO
   const alto = teto(Math.max(...dados.map((d) => d.valor)))
-  const passoX = (W - L - R) / dados.length
-  const largura = Math.min(46, passoX * 0.62)
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img"
-         aria-label={`${dados.length} colunas, máximo ${formatar(alto)}`}>
-      {[0, 0.5, 1].map((g) => (
-        <line key={g} x1={L} x2={W - R} y1={T + dispY * g} y2={T + dispY * g}
-              stroke={eixo} strokeWidth="1" strokeDasharray={g === 1 ? undefined : '3 4'} />
-      ))}
+    <div>
+      <div className="flex gap-2" style={{ height: altura }}>
+        <EixoY alto={alto} formatar={formatar} topo={TOPO} zona={zona} largura={RECUO} />
 
-      {dados.map((d, i) => {
-        const h = alto > 0 ? (d.valor / alto) * dispY : 0
-        const cx = L + passoX * i + passoX / 2
-        return (
-          <g key={i}>
-            <rect x={cx - largura / 2} y={T + dispY - h} width={largura} height={Math.max(h, d.valor > 0 ? 2 : 0)}
-                  rx="2" fill={cor} opacity={i === dados.length - 1 ? 1 : 0.72} />
-            {d.valor > 0 && (
-              <text x={cx} y={T + dispY - h - 4} fontSize="10" fill={tinta} textAnchor="middle" className="tabular">
-                {formatar(d.valor)}
-              </text>
-            )}
-            <text x={cx} y={H - 9} fontSize="10" fill={tinta} textAnchor="middle">{d.rotulo}</text>
-          </g>
-        )
-      })}
-    </svg>
+        <div className="relative flex-1 min-w-0">
+          <Grade topo={TOPO} zona={zona} />
+
+          <div className="absolute inset-0 flex items-stretch">
+            {dados.map((d, i) => {
+              const h = alto > 0 ? (d.valor / alto) * zona : 0
+              return (
+                <div key={i} className="relative flex-1">
+                  <div style={{ height: Math.max(h, d.valor > 0 ? 2 : 0), backgroundColor: cor,
+                                opacity: i === dados.length - 1 ? 1 : 0.72 }}
+                       className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[58%] max-w-[52px] rounded-t-[3px]" />
+                  {d.valor > 0 && (
+                    <span style={{ bottom: h + 3 }}
+                          className="absolute inset-x-0 text-center text-2xs text-ink-600 tabular">
+                      {formatar(d.valor)}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      <EixoX dados={dados} posicao={(i) => ((i + 0.5) * 100) / dados.length} recuo={RECUO} centrado />
+    </div>
   )
 }
 

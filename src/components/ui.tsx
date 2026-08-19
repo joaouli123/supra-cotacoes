@@ -236,7 +236,7 @@ export function CabecalhoPagina({ titulo, descricao, acoes, migalhas, icone }: {
           {descricao && <p className="text-sm text-ink-500 mt-1.5 max-w-2xl leading-relaxed">{descricao}</p>}
         </div>
       </div>
-      {acoes && <div className="flex items-center gap-2 flex-wrap shrink-0">{acoes}</div>}
+      {acoes && <div className="flex items-center gap-2 flex-wrap min-w-0">{acoes}</div>}
     </div>
   )
 }
