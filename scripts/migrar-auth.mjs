@@ -35,6 +35,39 @@ const EMAIL = (process.env.SUPRA_ADMIN_EMAIL || '').trim()
 const SENHA = process.env.SUPRA_ADMIN_SENHA || ''
 const NOME = (process.env.SUPRA_ADMIN_NOME || 'Administrador SUPRA').trim()
 
+// Trocar SUPRA_ADMIN_EMAIL nao renomeia a conta antiga: a busca acima e por
+// e-mail, entao o e-mail novo simplesmente nao acha nada e uma segunda conta
+// nasce. A primeira continuaria ai, admin_central, com a senha antiga valendo —
+// uma conta de administrador que ninguem lembra que existe. Aqui ela perde a
+// senha e para de logar. O filtro descreve exatamente o que este script cria
+// (admin da plataforma, sem empresa e sem fornecedor); conta de gente comum
+// nao se encaixa e nao e tocada.
+const SQL_ORFAOS = `update usuarios set senha_hash = null
+    where lower(email) <> lower(:1)
+      and senha_hash is not null
+      and perfil = 'admin_central'
+      and empresa_id is null
+      and fornecedor_id is null`
+
+function avisar(linhas) {
+  if (!linhas.length) return
+  const lista = linhas.map((r) => `${r.email} (id ${r.id})`).join(', ')
+  console.log(`  login revogado de ${linhas.length} conta(s) administrativa(s) orfa(s): ${lista}`)
+}
+
+async function revogarOrfaos(consultar, marcador) {
+  const linhas = await consultar(
+    `${SQL_ORFAOS.replace(':1', marcador)} returning id, email`,
+    [EMAIL]
+  )
+  avisar(linhas)
+}
+
+function revogarOrfaosSync(db) {
+  const linhas = db.prepare(SQL_ORFAOS.replace(':1', '?') + ' returning id, email').all(EMAIL)
+  avisar(linhas)
+}
+
 async function comPostgres(url) {
   const pg = require('pg')
   const c = new pg.Client({
@@ -65,6 +98,10 @@ async function comPostgres(url) {
         [NOME, EMAIL, hash])
       console.log(`  conta ${EMAIL} criada (id ${novo.rows[0].id})`)
     }
+    await revogarOrfaos(
+      (sql, ps) => c.query(sql, ps).then((r) => r.rows),
+      '$1'
+    )
   } finally {
     await c.end()
   }
@@ -94,6 +131,7 @@ function comSqlite() {
       .run(proximo, NOME, EMAIL, hash)
     console.log(`  conta ${EMAIL} criada (id ${proximo})`)
   }
+  revogarOrfaosSync(db)
   db.close()
 }
 
