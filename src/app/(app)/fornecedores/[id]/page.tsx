@@ -5,10 +5,16 @@ import { um, todos } from '@/lib/db'
 import { moeda, numero, data, dataHora, dec } from '@/lib/formato'
 import { Painel, CabecalhoPagina, Campo, Vazio, Tag, StatusTag } from '@/components/ui'
 import { IconeFabrica, IconeEtiqueta, IconeBalanca, IconeEscudo, IconeDocumento, IconeLocal, IconeEmail, IconeTelefone, IconeUsuario } from '@/components/icones'
+import { AcoesDetalhe, Retorno, Recusa } from '@/components/Acoes'
+import { REGISTROS } from '@/lib/registros'
+import { lerRecado } from '@/lib/flash'
 
 export const dynamic = 'force-dynamic'
+const SPEC = REGISTROS.fornecedores
 
-export default async function PaginaFornecedor({ params }: { params: { id: string } }) {
+export default async function PaginaFornecedor(
+  { params, searchParams }: { params: { id: string }; searchParams: { [k: string]: string | undefined } }
+) {
   const s = await exigir('cadastros')
   const id = Number(params.id)
   const f = await um<{
@@ -59,8 +65,15 @@ export default async function PaginaFornecedor({ params }: { params: { id: strin
         icone={<IconeFabrica size={19} />}
         titulo={f.razao_social}
         descricao={`${f.nome_fantasia} · ${f.cidade}/${f.uf}`}
-        acoes={<Tag variante={f.homologado ? 'positiva' : 'atencao'} ponto>{f.homologado ? 'Homologado' : 'Homologação pendente'}</Tag>}
+        acoes={<div className="flex items-center gap-2 flex-wrap">
+          <Tag variante={f.homologado ? 'positiva' : 'atencao'} ponto>{f.homologado ? 'Homologado' : 'Homologação pendente'}</Tag>
+          <AcoesDetalhe spec={SPEC} id={f.id} ativo={f.ativo} homologado={f.homologado}
+                        voltar={`/fornecedores/${f.id}`} />
+        </div>}
       />
+
+      <Retorno ok={searchParams.ok} />
+      <Recusa mensagem={lerRecado(searchParams.f)?.erros._} />
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_360px] gap-4 sm:gap-5">
         <div className="space-y-4 sm:space-y-5 min-w-0">

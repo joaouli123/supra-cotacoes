@@ -162,3 +162,26 @@ export const IconeEstrela = ({ className, size }: P) => (
 export const IconeRegua = ({ className, size }: P) => (
   <svg {...b(size)} className={className}><path d="M21.3 8.7 8.7 21.3a1 1 0 0 1-1.4 0l-4.6-4.6a1 1 0 0 1 0-1.4L15.3 2.7a1 1 0 0 1 1.4 0l4.6 4.6a1 1 0 0 1 0 1.4z" /><path d="m7.5 10.5 2 2M10.5 7.5l2 2M13.5 4.5l2 2M4.5 13.5l2 2" /></svg>
 )
+
+/* ------------------------------------------------------- acoes */
+export const IconeMais = ({ className, size }: P) => (
+  <svg {...b(size)} className={className}><path d="M12 5v14M5 12h14" /></svg>
+)
+export const IconeLapis = ({ className, size }: P) => (
+  <svg {...b(size)} className={className}><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" /></svg>
+)
+export const IconeLixeira = ({ className, size }: P) => (
+  <svg {...b(size)} className={className}><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M10 11v6M14 11v6" /></svg>
+)
+export const IconeArquivar = ({ className, size }: P) => (
+  <svg {...b(size)} className={className}><rect x="3" y="4" width="18" height="4" rx="1" /><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" /></svg>
+)
+export const IconeDesfazer = ({ className, size }: P) => (
+  <svg {...b(size)} className={className}><path d="M3 7v6h6" /><path d="M3.5 13a9 9 0 1 0 2.1-9.4L3 7" /></svg>
+)
+export const IconeSelo = ({ className, size }: P) => (
+  <svg {...b(size)} className={className}><circle cx="12" cy="9" r="6" /><path d="m9 13.5-1 7.5 4-2 4 2-1-7.5" /><path d="m9.8 9 1.6 1.6L14.4 7.6" /></svg>
+)
+export const IconeBaixar = ({ className, size }: P) => (
+  <svg {...b(size)} className={className}><path d="M12 3v12M7 11l5 4 5-4M4 20h16" /></svg>
+)

@@ -4,7 +4,9 @@ import { todos, um } from '@/lib/db'
 import { numero, data, dataRelativa } from '@/lib/formato'
 import { Painel, Paginacao, CabecalhoPagina, Vazio, StatusTag, Tag, Barra } from '@/components/ui'
 import { Filtros } from '@/components/Filtros'
-import { IconeBalanca, IconeBusca, IconeRelogio, IconeEnvio, IconeUsuario } from '@/components/icones'
+import { Retorno, Recusa } from '@/components/Acoes'
+import { lerRecado } from '@/lib/flash'
+import { IconeBalanca, IconeBusca, IconeRelogio, IconeEnvio, IconeUsuario, IconeMais } from '@/components/icones'
 
 export const dynamic = 'force-dynamic'
 const POR_PAGINA = 25
@@ -59,7 +61,11 @@ export default async function PaginaCotacoes({ searchParams }: { searchParams: {
       <CabecalhoPagina
         icone={<IconeBalanca size={19} />}
         titulo="Cotações"
-        descricao="Histórico completo do que foi disparado e do que foi recebido, com a equalização de cada rodada." />
+        descricao="Histórico completo do que foi disparado e do que foi recebido, com a equalização de cada rodada."
+        acoes={<Link href="/cotacoes/nova" className="btn btn-primario btn-sm"><IconeMais size={15} />Nova cotação</Link>} />
+
+      <Retorno ok={searchParams.ok} />
+      <Recusa mensagem={lerRecado(searchParams.f)?.erros._} />
 
       {/* atalhos por status */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
@@ -91,8 +97,11 @@ export default async function PaginaCotacoes({ searchParams }: { searchParams: {
       <Painel semPadding>
         {linhas.length === 0 ? (
           <Vazio icone={<IconeBusca size={20} />} titulo="Nenhuma cotação encontrada"
-            descricao="Ajuste a busca ou remova algum filtro."
-            acao={<Link href="/cotacoes" className="btn btn-secundario btn-sm">Limpar filtros</Link>} />
+            descricao="Ajuste a busca ou abra uma rodada nova."
+            acao={<div className="flex flex-wrap justify-center gap-2">
+              <Link href="/cotacoes" className="btn btn-secundario btn-sm">Limpar filtros</Link>
+              <Link href="/cotacoes/nova" className="btn btn-primario btn-sm"><IconeMais size={15} />Nova cotação</Link>
+            </div>} />
         ) : (
           <>
             <div className="rolagem-x">

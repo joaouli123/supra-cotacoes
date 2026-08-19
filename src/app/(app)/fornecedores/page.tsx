@@ -5,10 +5,14 @@ import { todos, um, buscaTextual } from '@/lib/db'
 import { numero, dec } from '@/lib/formato'
 import { Painel, Paginacao, CabecalhoPagina, Vazio, Tag, Aviso } from '@/components/ui'
 import { Filtros, TempoConsulta } from '@/components/Filtros'
+import { BotaoNovo, AcoesLinha, Retorno, Recusa } from '@/components/Acoes'
+import { REGISTROS } from '@/lib/registros'
+import { lerRecado } from '@/lib/flash'
 import { IconeFabrica, IconeBusca, IconeInfo, IconeEstrela, IconeLocal } from '@/components/icones'
 
 export const dynamic = 'force-dynamic'
 const POR_PAGINA = 40
+const SPEC = REGISTROS.fornecedores
 
 export default async function PaginaFornecedores({ searchParams }: { searchParams: { [k: string]: string | undefined } }) {
   const s = await exigir('cadastros')
@@ -22,7 +26,8 @@ export default async function PaginaFornecedores({ searchParams }: { searchParam
   const ufs = await todos<{ uf: string }>('select distinct uf from fornecedores order by uf')
   const grupos = await todos<{ id: number; nome: string }>('select id, nome from classificacoes where nivel = 1 order by nome')
 
-  const cond: string[] = ['f.ativo = 1']
+  const cond: string[] = []
+  cond.push(situacao === 'inativos' ? 'f.ativo = 0' : 'f.ativo = 1')
   const par: Array<string | number | null> = []
   const fe = filtroEmpresa(eid, 'f')
   cond.push(fe.sql); par.push(...fe.params)
@@ -44,10 +49,10 @@ export default async function PaginaFornecedores({ searchParams }: { searchParam
   const linhas = await todos<{
     id: number; razao_social: string; nome_fantasia: string; cnpj: string; cidade: string; uf: string
     cond_pagamento: string; prazo_entrega_dias: number; avaliacao: number; homologado: number
-    grupos: number; propostas: number
+    ativo: number; grupos: number; propostas: number
   }>(
     `select f.id, f.razao_social, f.nome_fantasia, f.cnpj, f.cidade, f.uf, f.cond_pagamento,
-            f.prazo_entrega_dias, f.avaliacao, f.homologado,
+            f.prazo_entrega_dias, f.avaliacao, f.homologado, f.ativo,
             (select count(*) from fornecedor_grupos where fornecedor_id = f.id) grupos,
             (select count(*) from propostas where fornecedor_id = f.id) propostas
        from fornecedores f ${juncaoFts}
@@ -56,6 +61,7 @@ export default async function PaginaFornecedores({ searchParams }: { searchParam
   const ms = Number(process.hrtime.bigint() - inicio) / 1e6
   const universo = (await um<{ c: number }>('select count(*) c from fornecedores'))?.c ?? 0
   const base = `/fornecedores?q=${encodeURIComponent(q)}&uf=${uf}&grupo=${grupo}&situacao=${situacao}`
+  const aqui = `${base}&pagina=${pagina}`
 
   return (
     <>
@@ -63,8 +69,11 @@ export default async function PaginaFornecedores({ searchParams }: { searchParam
         icone={<IconeFabrica size={19} />}
         titulo="Fornecedores"
         descricao="Cadastro com homologação, grupos de fornecimento habilitados e histórico de participação em cotações."
-        acoes={<TempoConsulta ms={ms} registros={universo} />}
+        acoes={<><TempoConsulta ms={ms} registros={universo} /><BotaoNovo spec={SPEC} /></>}
       />
+
+      <Retorno ok={searchParams.ok} />
+      <Recusa mensagem={lerRecado(searchParams.f)?.erros._} />
 
       <Filtros acao="/fornecedores" busca={q}
         placeholder="Buscar por razão social, nome fantasia, CNPJ ou cidade…"
@@ -74,14 +83,18 @@ export default async function PaginaFornecedores({ searchParams }: { searchParam
           { nome: 'uf', valor: uf, vazio: 'Todas as UFs', rotulo: 'UF',
             opcoes: ufs.map((u) => ({ valor: u.uf, rotulo: u.uf })) },
           { nome: 'situacao', valor: situacao, vazio: 'Todas as situações', rotulo: 'Situação', opcoes: [
-            { valor: 'homologado', rotulo: 'Homologados' }, { valor: 'pendente', rotulo: 'Não homologados' }] },
+            { valor: 'homologado', rotulo: 'Homologados' }, { valor: 'pendente', rotulo: 'Não homologados' },
+            { valor: 'inativos', rotulo: 'Somente inativos' }] },
         ]} />
 
       <Painel semPadding>
         {linhas.length === 0 ? (
           <Vazio icone={<IconeBusca size={20} />} titulo="Nenhum fornecedor encontrado"
             descricao="Ajuste a busca ou remova algum filtro para ampliar o resultado."
-            acao={<Link href="/fornecedores" className="btn btn-secundario btn-sm">Limpar filtros</Link>} />
+            acao={<div className="flex flex-wrap justify-center gap-2">
+              <Link href="/fornecedores" className="btn btn-secundario btn-sm">Limpar filtros</Link>
+              <BotaoNovo spec={SPEC} />
+            </div>} />
         ) : (
           <>
             <div className="rolagem-x">
@@ -91,6 +104,7 @@ export default async function PaginaFornecedores({ searchParams }: { searchParam
                     <th>Razão social</th><th>CNPJ</th><th>Praça</th>
                     <th className="num">Grupos</th><th>Condição padrão</th>
                     <th className="num">Propostas</th><th className="num">Avaliação</th><th>Homologação</th>
+                    <th className="w-px"><span className="sr-only">Ações</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -121,9 +135,13 @@ export default async function PaginaFornecedores({ searchParams }: { searchParam
                         </span>
                       </td>
                       <td data-r="Homologação">
-                        <Tag variante={f.homologado ? 'positiva' : 'atencao'} ponto>
-                          {f.homologado ? 'Homologado' : 'Pendente'}
+                        <Tag variante={!f.ativo ? 'neutra' : f.homologado ? 'positiva' : 'atencao'} ponto>
+                          {!f.ativo ? 'Inativo' : f.homologado ? 'Homologado' : 'Pendente'}
                         </Tag>
+                      </td>
+                      <td data-a>
+                        <AcoesLinha spec={SPEC} id={f.id} ativo={f.ativo} homologado={f.homologado}
+                                    rotulo={f.razao_social} voltar={aqui} />
                       </td>
                     </tr>
                   ))}

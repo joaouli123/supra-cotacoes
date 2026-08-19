@@ -6,11 +6,17 @@ import { trilhaClassificacao } from '@/lib/consultas'
 import { moeda, numero, data } from '@/lib/formato'
 import { Painel, CabecalhoPagina, Campo, Vazio, Tag, Barra } from '@/components/ui'
 import { IconeCaixa, IconeArvore, IconeGrafico, IconeDocumento, IconeRegua, IconeFabrica } from '@/components/icones'
+import { AcoesDetalhe, Retorno, Recusa } from '@/components/Acoes'
+import { REGISTROS } from '@/lib/registros'
+import { lerRecado } from '@/lib/flash'
 
 export const dynamic = 'force-dynamic'
+const SPEC = REGISTROS.materiais
 const NIVEIS = ['Grupo', 'Subgrupo', 'Família', 'Subfamília', 'Classe']
 
-export default async function PaginaMaterial({ params }: { params: { id: string } }) {
+export default async function PaginaMaterial(
+  { params, searchParams }: { params: { id: string }; searchParams: { [k: string]: string | undefined } }
+) {
   const s = await exigir('cadastros')
   const id = Number(params.id)
   const m = await um<{
@@ -59,7 +65,11 @@ export default async function PaginaMaterial({ params }: { params: { id: string 
         icone={<IconeCaixa size={19} />}
         titulo={m.descricao}
         descricao={m.especificacao}
+        acoes={<AcoesDetalhe spec={SPEC} id={m.id} ativo={m.ativo} voltar={`/materiais/${m.id}`} />}
       />
+
+      <Retorno ok={searchParams.ok} />
+      <Recusa mensagem={lerRecado(searchParams.f)?.erros._} />
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_360px] gap-4 sm:gap-5">
         <div className="space-y-4 sm:space-y-5 min-w-0">

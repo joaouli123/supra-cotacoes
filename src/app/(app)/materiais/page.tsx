@@ -5,10 +5,14 @@ import { todos, um, buscaTextual } from '@/lib/db'
 import { moeda, numero } from '@/lib/formato'
 import { Painel, Paginacao, CabecalhoPagina, Vazio, Tag, Aviso } from '@/components/ui'
 import { Filtros, TempoConsulta } from '@/components/Filtros'
+import { BotaoNovo, AcoesLinha, Retorno, Recusa } from '@/components/Acoes'
+import { REGISTROS } from '@/lib/registros'
+import { lerRecado } from '@/lib/flash'
 import { IconeCaixa, IconeBusca, IconeCamada, IconeInfo } from '@/components/icones'
 
 export const dynamic = 'force-dynamic'
 const POR_PAGINA = 40
+const SPEC = REGISTROS.materiais
 
 export default async function PaginaMateriais({ searchParams }: { searchParams: { [k: string]: string | undefined } }) {
   const s = await exigir('cadastros')
@@ -16,12 +20,13 @@ export default async function PaginaMateriais({ searchParams }: { searchParams: 
   const q = (searchParams.q ?? '').trim()
   const grupo = searchParams.grupo ?? ''
   const curva = searchParams.curva ?? ''
+  const situacao = searchParams.situacao ?? 'ativos'
   const pagina = Math.max(1, Number(searchParams.pagina ?? 1))
 
   const grupos = await todos<{ id: number; nome: string }>(
     'select id, nome from classificacoes where nivel = 1 order by nome')
 
-  const cond: string[] = ['m.ativo = 1']
+  const cond: string[] = [situacao === 'inativos' ? 'm.ativo = 0' : 'm.ativo = 1']
   const par: Array<string | number | null> = []
   const fe = filtroEmpresa(eid, 'm')
   cond.push(fe.sql); par.push(...fe.params)
@@ -44,10 +49,11 @@ export default async function PaginaMateriais({ searchParams }: { searchParams: 
 
   const linhas = await todos<{
     id: number; codigo: string; descricao: string; unidade: string; caminho: string
-    preco_referencia: number; curva: string; ncm: string; empresa_id: number | null; empresa: string | null
+    preco_referencia: number; curva: string; ncm: string; ativo: number
+    empresa_id: number | null; empresa: string | null
   }>(
     `select m.id, m.codigo, m.descricao, un.sigla as unidade, cl.caminho,
-            m.preco_referencia, m.curva, m.ncm, m.empresa_id, e.nome_fantasia as empresa
+            m.preco_referencia, m.curva, m.ncm, m.ativo, m.empresa_id, e.nome_fantasia as empresa
        from materiais m ${juncaoFts}
        join unidades un on un.id = m.unidade_id
        join classificacoes cl on cl.id = m.classificacao_id
@@ -57,7 +63,8 @@ export default async function PaginaMateriais({ searchParams }: { searchParams: 
 
   const ms = Number(process.hrtime.bigint() - inicio) / 1e6
   const universo = (await um<{ c: number }>('select count(*) c from materiais'))?.c ?? 0
-  const base = `/materiais?q=${encodeURIComponent(q)}&grupo=${encodeURIComponent(grupo)}&curva=${curva}`
+  const base = `/materiais?q=${encodeURIComponent(q)}&grupo=${encodeURIComponent(grupo)}&curva=${curva}&situacao=${situacao}`
+  const aqui = `${base}&pagina=${pagina}`
 
   return (
     <>
@@ -65,8 +72,11 @@ export default async function PaginaMateriais({ searchParams }: { searchParams: 
         icone={<IconeCaixa size={19} />}
         titulo="Materiais"
         descricao="Catálogo corporativo compartilhado e itens exclusivos de cada empresa, classificados em cinco níveis."
-        acoes={<TempoConsulta ms={ms} registros={universo} />}
+        acoes={<><TempoConsulta ms={ms} registros={universo} /><BotaoNovo spec={SPEC} /></>}
       />
+
+      <Retorno ok={searchParams.ok} />
+      <Recusa mensagem={lerRecado(searchParams.f)?.erros._} />
 
       <Filtros
         acao="/materiais" busca={q}
@@ -78,6 +88,8 @@ export default async function PaginaMateriais({ searchParams }: { searchParams: 
             { valor: 'A', rotulo: 'Curva A — alto valor' },
             { valor: 'B', rotulo: 'Curva B — valor médio' },
             { valor: 'C', rotulo: 'Curva C — baixo valor' }] },
+          { nome: 'situacao', valor: situacao, vazio: 'Todas as situações', rotulo: 'Situação', opcoes: [
+            { valor: 'ativos', rotulo: 'Somente ativos' }, { valor: 'inativos', rotulo: 'Somente inativos' }] },
         ]}
       />
 
@@ -86,7 +98,10 @@ export default async function PaginaMateriais({ searchParams }: { searchParams: 
           <Vazio icone={<IconeBusca size={20} />}
             titulo="Nenhum material encontrado"
             descricao="Ajuste os termos da busca ou remova algum filtro para ampliar o resultado."
-            acao={<Link href="/materiais" className="btn btn-secundario btn-sm">Limpar filtros</Link>} />
+            acao={<div className="flex flex-wrap justify-center gap-2">
+              <Link href="/materiais" className="btn btn-secundario btn-sm">Limpar filtros</Link>
+              <BotaoNovo spec={SPEC} />
+            </div>} />
         ) : (
           <>
             <div className="rolagem-x">
@@ -95,6 +110,7 @@ export default async function PaginaMateriais({ searchParams }: { searchParams: 
                   <tr>
                     <th>Código</th><th>Descrição</th><th>Classificação</th>
                     <th>Un.</th><th className="num">Preço ref.</th><th>Curva</th><th>Origem</th>
+                    <th className="w-px"><span className="sr-only">Ações</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -121,6 +137,9 @@ export default async function PaginaMateriais({ searchParams }: { searchParams: 
                       </td>
                       <td data-r="Origem" className="text-xs text-ink-500 whitespace-nowrap">
                         {m.empresa_id === null ? 'Corporativo' : m.empresa}
+                      </td>
+                      <td data-a>
+                        <AcoesLinha spec={SPEC} id={m.id} ativo={m.ativo} rotulo={m.descricao} voltar={aqui} />
                       </td>
                     </tr>
                   ))}

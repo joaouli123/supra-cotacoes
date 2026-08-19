@@ -3,7 +3,12 @@ import { exigir } from '@/lib/acesso'
 import { todos, um } from '@/lib/db'
 import { Painel, Paginacao, CabecalhoPagina, Vazio, Tag, Aviso } from '@/components/ui'
 import { Filtros, TempoConsulta } from '@/components/Filtros'
+import { BotaoNovo, AcoesLinha, Retorno, Recusa } from '@/components/Acoes'
+import { REGISTROS } from '@/lib/registros'
+import { lerRecado } from '@/lib/flash'
 import { IconePessoas, IconeBusca, IconeEscudo, IconeLocal } from '@/components/icones'
+
+const SPEC = REGISTROS.clientes
 
 export const dynamic = 'force-dynamic'
 const POR_PAGINA = 40
@@ -14,6 +19,7 @@ export default async function PaginaClientes({ searchParams }: { searchParams: {
   const q = (searchParams.q ?? '').trim()
   const segmento = searchParams.segmento ?? ''
   const uf = searchParams.uf ?? ''
+  const situacao = searchParams.situacao ?? 'ativos'
   const pagina = Math.max(1, Number(searchParams.pagina ?? 1))
 
   const segmentos = await todos<{ segmento: string }>('select distinct segmento from clientes order by segmento')
@@ -25,6 +31,8 @@ export default async function PaginaClientes({ searchParams }: { searchParams: {
   if (q) { cond.push('(c.razao_social like ? or c.nome_fantasia like ? or c.cnpj like ?)'); par.push(`%${q}%`, `%${q}%`, `%${q}%`) }
   if (segmento) { cond.push('c.segmento = ?'); par.push(segmento) }
   if (uf) { cond.push('c.uf = ?'); par.push(uf) }
+  if (situacao === 'ativos') cond.push('c.ativo = 1')
+  if (situacao === 'inativos') cond.push('c.ativo = 0')
   const onde = cond.join(' and ')
 
   const inicio = process.hrtime.bigint()
@@ -39,6 +47,8 @@ export default async function PaginaClientes({ searchParams }: { searchParams: {
     [...par, POR_PAGINA, (pagina - 1) * POR_PAGINA])
   const ms = Number(process.hrtime.bigint() - inicio) / 1e6
   const universo = (await um<{ c: number }>('select count(*) c from clientes'))?.c ?? 0
+  const base = `/clientes?q=${encodeURIComponent(q)}&segmento=${encodeURIComponent(segmento)}&uf=${uf}&situacao=${situacao}`
+  const aqui = `${base}&pagina=${pagina}`
 
   return (
     <>
@@ -46,7 +56,10 @@ export default async function PaginaClientes({ searchParams }: { searchParams: {
         icone={<IconePessoas size={19} />}
         titulo="Clientes"
         descricao="Cadastro exclusivo de cada empresa — sem compartilhamento entre os inquilinos da plataforma."
-        acoes={<TempoConsulta ms={ms} registros={universo} />} />
+        acoes={<><TempoConsulta ms={ms} registros={universo} /><BotaoNovo spec={SPEC} /></>} />
+
+      <Retorno ok={searchParams.ok} />
+      <Recusa mensagem={lerRecado(searchParams.f)?.erros._} />
 
       <Filtros acao="/clientes" busca={q} placeholder="Buscar por razão social, nome fantasia ou CNPJ…"
         selects={[
@@ -54,13 +67,18 @@ export default async function PaginaClientes({ searchParams }: { searchParams: {
             opcoes: segmentos.map((x) => ({ valor: x.segmento, rotulo: x.segmento })) },
           { nome: 'uf', valor: uf, vazio: 'Todas as UFs', rotulo: 'UF',
             opcoes: ufs.map((x) => ({ valor: x.uf, rotulo: x.uf })) },
+          { nome: 'situacao', valor: situacao, vazio: 'Todas as situações', rotulo: 'Situação',
+            opcoes: [{ valor: 'ativos', rotulo: 'Somente ativos' }, { valor: 'inativos', rotulo: 'Somente inativos' }] },
         ]} />
 
       <Painel semPadding>
         {linhas.length === 0 ? (
           <Vazio icone={<IconeBusca size={20} />} titulo="Nenhum cliente encontrado"
             descricao="Ajuste a busca ou remova algum filtro."
-            acao={<Link href="/clientes" className="btn btn-secundario btn-sm">Limpar filtros</Link>} />
+            acao={<div className="flex gap-2">
+              <Link href="/clientes" className="btn btn-secundario btn-sm">Limpar filtros</Link>
+              <BotaoNovo spec={SPEC} />
+            </div>} />
         ) : (
           <>
             <div className="rolagem-x">
@@ -68,6 +86,7 @@ export default async function PaginaClientes({ searchParams }: { searchParams: {
                 <thead><tr>
                   <th>Razão social</th><th>CNPJ</th><th>Contato</th><th>Praça</th>
                   <th>Segmento</th><th className="num">Alterações</th><th>Situação</th>
+                  <th className="w-px"><span className="sr-only">Ações</span></th>
                 </tr></thead>
                 <tbody>
                   {linhas.map((c) => (
@@ -91,13 +110,15 @@ export default async function PaginaClientes({ searchParams }: { searchParams: {
                       <td data-r="Situação">
                         <Tag variante={c.ativo ? 'positiva' : 'neutra'} ponto>{c.ativo ? 'Ativo' : 'Inativo'}</Tag>
                       </td>
+                      <td data-a>
+                        <AcoesLinha spec={SPEC} id={c.id} ativo={c.ativo} rotulo={c.razao_social} voltar={aqui} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <Paginacao base={`/clientes?q=${encodeURIComponent(q)}&segmento=${encodeURIComponent(segmento)}&uf=${uf}`}
-              pagina={pagina} porPagina={POR_PAGINA} total={total} />
+            <Paginacao base={base} pagina={pagina} porPagina={POR_PAGINA} total={total} />
           </>
         )}
       </Painel>

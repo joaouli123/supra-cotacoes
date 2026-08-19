@@ -3,11 +3,15 @@ import { todos, um } from '@/lib/db'
 import { numero, dataHora, dataRelativa, dec } from '@/lib/formato'
 import { Painel, CabecalhoPagina, Vazio, Tag, Kpi, GradeKpis, Barra } from '@/components/ui'
 import { IconeRelogio, IconeEnvio, IconeCalendario, IconeCheck, IconeGrafico, IconeRaio } from '@/components/icones'
+import { BotaoNovo, AcoesLinha, Retorno, Recusa } from '@/components/Acoes'
+import { REGISTROS } from '@/lib/registros'
+import { lerRecado } from '@/lib/flash'
 
 export const dynamic = 'force-dynamic'
 const DIAS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
+const SPEC = REGISTROS.agendamentos
 
-export default async function PaginaAgendamentos() {
+export default async function PaginaAgendamentos({ searchParams }: { searchParams: { [k: string]: string | undefined } }) {
   const s = await exigir('agendamentos')
   const eid = s.empresa?.id ?? null
   const p = eid ? [eid] : []
@@ -42,7 +46,11 @@ export default async function PaginaAgendamentos() {
   return (
     <>
       <CabecalhoPagina icone={<IconeRelogio size={19} />} titulo="Disparos programados"
-        descricao="Rodadas de cotação enviadas em dias e horários parametrizados pelo administrador, com disparo manual disponível para exceções." />
+        descricao="Rodadas de cotação enviadas em dias e horários parametrizados pelo administrador, com disparo manual disponível para exceções."
+        acoes={<BotaoNovo spec={SPEC} rotulo="Nova janela" />} />
+
+      <Retorno ok={searchParams.ok} />
+      <Recusa mensagem={lerRecado(searchParams.f)?.erros._} />
 
       <GradeKpis>
         <Kpi icone={<IconeCalendario size={14} />} rotulo="Agendamentos ativos" valor={numero(agendamentos.filter((a) => a.ativo).length)}
@@ -57,7 +65,8 @@ export default async function PaginaAgendamentos() {
 
       <div className="grid xl:grid-cols-2 gap-4 sm:gap-5 mt-4 sm:mt-5">
         <Painel semPadding icone={<IconeCalendario size={15} />} titulo="Janelas configuradas">
-          {agendamentos.length === 0 ? <Vazio icone={<IconeCalendario size={20} />} titulo="Nenhum agendamento configurado" descricao="As janelas de disparo são parâmetros do administrador da plataforma." /> : (
+          {agendamentos.length === 0 ? <Vazio icone={<IconeCalendario size={20} />} titulo="Nenhum agendamento configurado" descricao="As janelas de disparo são parâmetros do administrador da plataforma."
+              acao={<BotaoNovo spec={SPEC} rotulo="Nova janela" />} /> : (
             <ul className="divide-y divide-ink-100">
               {agendamentos.map((a) => {
                 const ativos = a.dias_semana.split(',').map((d) => d.trim())
@@ -71,7 +80,10 @@ export default async function PaginaAgendamentos() {
                           {a.canal === 'ambos' ? 'e-mail e portal' : a.canal}
                         </p>
                       </div>
-                      <Tag variante={a.ativo ? 'positiva' : 'neutra'} ponto>{a.ativo ? 'Ativo' : 'Pausado'}</Tag>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Tag variante={a.ativo ? 'positiva' : 'neutra'} ponto>{a.ativo ? 'Ativo' : 'Pausado'}</Tag>
+                        <AcoesLinha spec={SPEC} id={a.id} ativo={a.ativo} rotulo={a.nome} voltar="/agendamentos" />
+                      </div>
                     </div>
                     <div className="flex items-center gap-1 mt-3">
                       {DIAS.map((d) => (

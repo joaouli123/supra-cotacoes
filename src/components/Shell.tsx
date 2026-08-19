@@ -5,13 +5,16 @@ import { iniciais } from '@/lib/formato'
 import {
   IconePainel, IconeCaixa, IconeFabrica, IconePessoas, IconeCaminhao, IconeLista,
   IconeBalanca, IconeRelogio, IconeConector, IconeEscudo, IconePredio, IconeChevron,
-  IconeArquitetura, IconePorta, IconeCheck, IconeCadeado,
+  IconeArquitetura, IconePorta, IconeCheck, IconeCadeado, IconeGrafico, IconeUsuario,
 } from './icones'
 
 function secoesPara(perfil: Perfil): SecaoNav[] {
   const geral: SecaoNav = {
     titulo: 'Geral',
-    itens: [{ href: '/painel', rotulo: 'Visão geral', icone: <IconePainel size={16} />, exato: true }],
+    itens: [
+      { href: '/painel', rotulo: 'Visão geral', icone: <IconePainel size={16} />, exato: true },
+      { href: '/relatorios', rotulo: 'Relatórios', icone: <IconeGrafico size={16} /> },
+    ],
   }
   const suprimentos: SecaoNav = {
     titulo: 'Suprimentos',
@@ -35,6 +38,7 @@ function secoesPara(perfil: Perfil): SecaoNav[] {
     itens: [
       { href: '/integracoes', rotulo: 'Integrações ERP', icone: <IconeConector size={16} /> },
       { href: '/auditoria', rotulo: 'Auditoria', icone: <IconeEscudo size={16} /> },
+      { href: '/usuarios', rotulo: 'Usuários', icone: <IconeUsuario size={16} /> },
       { href: '/empresas', rotulo: 'Empresas', icone: <IconePredio size={16} /> },
       { href: '/arquitetura', rotulo: 'Arquitetura', icone: <IconeArquitetura size={16} /> },
     ],
@@ -42,7 +46,7 @@ function secoesPara(perfil: Perfil): SecaoNav[] {
 
   if (perfil === 'comprador') {
     return [geral, { ...suprimentos, itens: suprimentos.itens.slice(0, 2) }, cadastros,
-      { titulo: 'Plataforma', itens: [plataforma.itens[3]] }]
+      { titulo: 'Plataforma', itens: plataforma.itens.filter((i) => i.href === '/arquitetura') }]
   }
   if (perfil === 'gestor') {
     return [geral, suprimentos, cadastros,

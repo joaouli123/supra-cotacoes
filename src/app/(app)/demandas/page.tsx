@@ -4,7 +4,9 @@ import { todos, um } from '@/lib/db'
 import { moeda, numero, data } from '@/lib/formato'
 import { Painel, Paginacao, CabecalhoPagina, Vazio, StatusTag, Tag } from '@/components/ui'
 import { Filtros } from '@/components/Filtros'
-import { IconeLista, IconeBusca, IconeConector, IconeCalendario } from '@/components/icones'
+import { Retorno, Recusa } from '@/components/Acoes'
+import { lerRecado } from '@/lib/flash'
+import { IconeLista, IconeBusca, IconeConector, IconeCalendario, IconeMais } from '@/components/icones'
 
 export const dynamic = 'force-dynamic'
 const POR_PAGINA = 30
@@ -50,7 +52,11 @@ export default async function PaginaDemandas({ searchParams }: { searchParams: {
       <CabecalhoPagina
         icone={<IconeLista size={19} />}
         titulo="Demandas de compra"
-        descricao="As requisições nascem de várias origens — requisição interna, ponto de reposição, lançamento manual ou integração com o ERP — e alimentam as cotações." />
+        descricao="As requisições nascem de várias origens — requisição interna, ponto de reposição, lançamento manual ou integração com o ERP — e alimentam as cotações."
+        acoes={<Link href="/demandas/nova" className="btn btn-primario btn-sm"><IconeMais size={15} />Nova demanda</Link>} />
+
+      <Retorno ok={searchParams.ok} />
+      <Recusa mensagem={lerRecado(searchParams.f)?.erros._} />
 
       <Filtros acao="/demandas" busca={q} placeholder="Buscar por número, solicitante ou centro de custo…"
         selects={[
@@ -64,8 +70,11 @@ export default async function PaginaDemandas({ searchParams }: { searchParams: {
       <Painel semPadding>
         {linhas.length === 0 ? (
           <Vazio icone={<IconeBusca size={20} />} titulo="Nenhuma demanda encontrada"
-            descricao="Ajuste a busca ou remova algum filtro."
-            acao={<Link href="/demandas" className="btn btn-secundario btn-sm">Limpar filtros</Link>} />
+            descricao="Ajuste a busca ou abra uma requisição nova."
+            acao={<div className="flex flex-wrap justify-center gap-2">
+              <Link href="/demandas" className="btn btn-secundario btn-sm">Limpar filtros</Link>
+              <Link href="/demandas/nova" className="btn btn-primario btn-sm"><IconeMais size={15} />Nova demanda</Link>
+            </div>} />
         ) : (
           <>
             <div className="rolagem-x">
@@ -74,12 +83,16 @@ export default async function PaginaDemandas({ searchParams }: { searchParams: {
                   <th>Requisição</th><th>Origem</th><th>Solicitante</th><th>Centro de custo</th>
                   <th className="num">Itens</th><th className="num">Valor estimado</th>
                   <th>Cotação</th><th>Status</th>
+                  <th className="w-px"><span className="sr-only">Ações</span></th>
                 </tr></thead>
                 <tbody>
                   {linhas.map((d) => (
                     <tr key={d.id}>
                       <td data-p>
-                        <span className="texto-mono text-sm text-ink-900 font-medium md:font-normal">{d.numero}</span>
+                        <Link href={`/demandas/${d.id}`}
+                              className="texto-mono text-sm text-ink-900 hover:text-petrol-700 font-medium md:font-normal transition-colors">
+                          {d.numero}
+                        </Link>
                         <span className="block text-2xs text-ink-500 mt-0.5 inline-flex items-center gap-1">
                           <IconeCalendario size={11} className="text-ink-400" />{data(d.criado_em)}
                         </span>
@@ -104,6 +117,9 @@ export default async function PaginaDemandas({ searchParams }: { searchParams: {
                           : <span className="text-xs text-ink-300">—</span>}
                       </td>
                       <td data-r="Status"><StatusTag status={d.status} /></td>
+                      <td data-a>
+                        <Link href={`/demandas/${d.id}`} className="btn btn-secundario btn-sm">Abrir</Link>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

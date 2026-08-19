@@ -69,7 +69,13 @@ export async function economiaConsolidada(idEmpresa: number | null) {
     `select id from cotacoes where status = 'equalizada' ${filtro} order by encerrado_em desc`, params)
 
   let referencia = 0, contratadoGlobal = 0, contratadoPorItem = 0, itens = 0
-  const porCotacao: Array<{ id: number; numero: string; titulo: string; referencia: number; melhor: number; economia: number }> = []
+  // `global` guarda o total se a rodada inteira fosse dada ao melhor
+  // fornecedor unico — e a diferenca para `melhor` que mede o ganho de
+  // pulverizar. Sem ele por cotacao, nao da para recortar por periodo.
+  const porCotacao: Array<{
+    id: number; numero: string; titulo: string
+    referencia: number; melhor: number; global: number; economia: number
+  }> = []
 
   for (const { id } of ids) {
     const r = await equalizacaoDa(id)
@@ -81,6 +87,7 @@ export async function economiaConsolidada(idEmpresa: number | null) {
     porCotacao.push({
       id, numero: r.cot.numero, titulo: r.cot.titulo,
       referencia: r.eq.totalReferencia, melhor: r.eq.totalMelhorPorItem,
+      global: r.eq.totalMelhorGlobal,
       economia: r.eq.totalReferencia > 0 ? 1 - r.eq.totalMelhorPorItem / r.eq.totalReferencia : 0,
     })
   }

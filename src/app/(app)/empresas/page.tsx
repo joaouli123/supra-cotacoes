@@ -1,17 +1,23 @@
+import Link from 'next/link'
 import { todos, um } from '@/lib/db'
 import { exigir } from '@/lib/acesso'
 import { numero, percentual, data, iniciais } from '@/lib/formato'
 import { Painel, CabecalhoPagina, Tag, Kpi, GradeKpis, Vazio, Barra, Aviso } from '@/components/ui'
 import { IconePredio, IconeUsuario, IconeBalanca, IconeCaixa, IconeCadeado, IconeLocal } from '@/components/icones'
+import { BotaoNovo, AcoesLinha, Retorno, Recusa } from '@/components/Acoes'
+import { REGISTROS } from '@/lib/registros'
+import { lerRecado } from '@/lib/flash'
 
 export const dynamic = 'force-dynamic'
+const SPEC = REGISTROS.empresas
 
-export default async function PaginaEmpresas() {
+export default async function PaginaEmpresas({ searchParams }: { searchParams: { [k: string]: string | undefined } }) {
   const s = await exigir('admin')
+  const situacao = searchParams.situacao ?? 'ativas'
 
   const linhas = await todos<{
     id: number; razao_social: string; nome_fantasia: string; cnpj: string; cidade: string; uf: string
-    segmento: string; plano: string; criado_em: string
+    segmento: string; plano: string; criado_em: string; ativo: number
     usuarios: number; compradores: number; cotacoes: number; materiais: number
     clientes: number; conectores: number
   }>(
@@ -22,7 +28,7 @@ export default async function PaginaEmpresas() {
        (select count(*) from materiais m where m.empresa_id = e.id) materiais,
        (select count(*) from clientes cl where cl.empresa_id = e.id) clientes,
        (select count(*) from erp_conectores k where k.empresa_id = e.id) conectores
-     from empresas e where e.ativo = 1 order by e.nome_fantasia`)
+     from empresas e where e.ativo = ? order by e.nome_fantasia`, [situacao === 'inativas' ? 0 : 1])
 
   const corporativos = (await um<{ c: number }>('select count(*) c from materiais where empresa_id is null'))?.c ?? 0
   const totalUsuarios = (await um<{ c: number }>('select count(*) c from usuarios'))?.c ?? 0
@@ -32,7 +38,11 @@ export default async function PaginaEmpresas() {
   return (
     <>
       <CabecalhoPagina icone={<IconePredio size={19} />} titulo="Empresas na plataforma"
-        descricao="Visão do administrador central: cada empresa é um inquilino isolado, com seus usuários, cadastros próprios e conectores de ERP." />
+        descricao="Visão do administrador central: cada empresa é um inquilino isolado, com seus usuários, cadastros próprios e conectores de ERP."
+        acoes={<BotaoNovo spec={SPEC} rotulo="Nova empresa" />} />
+
+      <Retorno ok={searchParams.ok} />
+      <Recusa mensagem={lerRecado(searchParams.f)?.erros._} />
 
       <GradeKpis>
         <Kpi icone={<IconePredio size={14} />} rotulo="Empresas ativas" valor={numero(linhas.length)} apoio="inquilinos da plataforma" />
@@ -42,8 +52,15 @@ export default async function PaginaEmpresas() {
       </GradeKpis>
 
       <div className="mt-5">
-        <Painel semPadding icone={<IconePredio size={15} />} titulo="Inquilinos">
-          {linhas.length === 0 ? <Vazio titulo="Nenhuma empresa" /> : (
+        <Painel semPadding icone={<IconePredio size={15} />} titulo="Inquilinos"
+          acao={<div className="flex items-center gap-1 text-2xs">
+            <Link href={`/empresas?situacao=ativas`}
+                  className={situacao === 'inativas' ? 'text-ink-500 hover:text-ink-900' : 'text-ink-900 font-medium'}>Ativas</Link>
+            <span className="text-ink-300">|</span>
+            <Link href={`/empresas?situacao=inativas`}
+                  className={situacao === 'inativas' ? 'text-ink-900 font-medium' : 'text-ink-500 hover:text-ink-900'}>Inativas</Link>
+          </div>}>
+          {linhas.length === 0 ? <Vazio titulo="Nenhuma empresa" acao={<BotaoNovo spec={SPEC} rotulo="Nova empresa" />} /> : (
             <div className="rolagem-x">
               <table className="tabela tabela-cartoes">
                 <thead><tr>
@@ -81,9 +98,15 @@ export default async function PaginaEmpresas() {
                         </div>
                       </td>
                       <td data-a className="text-right">
-                        {e.id === s.empresa?.id
-                          ? <Tag variante="ativa">Contexto atual</Tag>
-                          : <a href={`/api/contexto?empresa=${e.id}&voltar=/painel`} className="btn btn-secundario btn-sm">Entrar</a>}
+                        <div className="flex items-center justify-end gap-1">
+                          {e.id === s.empresa?.id
+                            ? <Tag variante="ativa">Contexto atual</Tag>
+                            : e.ativo
+                              ? <a href={`/api/contexto?empresa=${e.id}&voltar=/painel`} className="btn btn-secundario btn-sm">Entrar</a>
+                              : null}
+                          <AcoesLinha spec={SPEC} id={e.id} ativo={e.ativo} rotulo={e.nome_fantasia}
+                                      voltar={`/empresas?situacao=${situacao}`} />
+                        </div>
                       </td>
                     </tr>
                   ))}

@@ -4,10 +4,14 @@ import { filtroEmpresa } from '@/lib/sessao'
 import { todos, um } from '@/lib/db'
 import { Painel, Paginacao, CabecalhoPagina, Vazio, Tag } from '@/components/ui'
 import { Filtros, TempoConsulta } from '@/components/Filtros'
+import { BotaoNovo, AcoesLinha, Retorno, Recusa } from '@/components/Acoes'
+import { REGISTROS } from '@/lib/registros'
+import { lerRecado } from '@/lib/flash'
 import { IconeCaminhao, IconeBusca, IconeLocal } from '@/components/icones'
 
 export const dynamic = 'force-dynamic'
 const POR_PAGINA = 40
+const SPEC = REGISTROS.transportadoras
 
 export default async function PaginaTransportadoras({ searchParams }: { searchParams: { [k: string]: string | undefined } }) {
   const s = await exigir('cadastros')
@@ -16,13 +20,14 @@ export default async function PaginaTransportadoras({ searchParams }: { searchPa
   const modal = searchParams.modal ?? ''
   const abrangencia = searchParams.abrangencia ?? ''
   const uf = searchParams.uf ?? ''
+  const situacao = searchParams.situacao ?? 'ativos'
   const pagina = Math.max(1, Number(searchParams.pagina ?? 1))
 
   const modais = await todos<{ modal: string }>('select distinct modal from transportadoras order by modal')
   const abrangencias = await todos<{ abrangencia: string }>('select distinct abrangencia from transportadoras order by abrangencia')
   const ufs = await todos<{ uf: string }>('select distinct uf from transportadoras order by uf')
 
-  const cond: string[] = ['t.ativo = 1']
+  const cond: string[] = [situacao === 'inativos' ? 't.ativo = 0' : 't.ativo = 1']
   const par: Array<string | number> = []
   const fe = filtroEmpresa(eid, 't')
   cond.push(fe.sql); par.push(...fe.params)
@@ -36,11 +41,14 @@ export default async function PaginaTransportadoras({ searchParams }: { searchPa
   const total = (await um<{ c: number }>(`select count(*) c from transportadoras t where ${onde}`, par))?.c ?? 0
   const linhas = await todos<{
     id: number; razao_social: string; nome_fantasia: string; cnpj: string; email: string
-    cidade: string; uf: string; modal: string; abrangencia: string; prazo_medio_dias: number
+    cidade: string; uf: string; modal: string; abrangencia: string; prazo_medio_dias: number; ativo: number
   }>(`select t.* from transportadoras t where ${onde} order by t.razao_social limit ? offset ?`,
     [...par, POR_PAGINA, (pagina - 1) * POR_PAGINA])
   const ms = Number(process.hrtime.bigint() - inicio) / 1e6
   const universo = (await um<{ c: number }>('select count(*) c from transportadoras'))?.c ?? 0
+  const base = `/transportadoras?q=${encodeURIComponent(q)}&modal=${encodeURIComponent(modal)}`
+    + `&abrangencia=${encodeURIComponent(abrangencia)}&uf=${uf}&situacao=${situacao}`
+  const aqui = `${base}&pagina=${pagina}`
 
   return (
     <>
@@ -48,7 +56,10 @@ export default async function PaginaTransportadoras({ searchParams }: { searchPa
         icone={<IconeCaminhao size={19} />}
         titulo="Transportadoras"
         descricao="Base logística usada no cálculo de frete e prazo dentro da equalização."
-        acoes={<TempoConsulta ms={ms} registros={universo} />} />
+        acoes={<><TempoConsulta ms={ms} registros={universo} /><BotaoNovo spec={SPEC} /></>} />
+
+      <Retorno ok={searchParams.ok} />
+      <Recusa mensagem={lerRecado(searchParams.f)?.erros._} />
 
       <Filtros acao="/transportadoras" busca={q} placeholder="Buscar por razão social, CNPJ ou cidade…"
         selects={[
@@ -58,13 +69,18 @@ export default async function PaginaTransportadoras({ searchParams }: { searchPa
             opcoes: abrangencias.map((x) => ({ valor: x.abrangencia, rotulo: x.abrangencia })) },
           { nome: 'uf', valor: uf, vazio: 'Todas as UFs', rotulo: 'UF',
             opcoes: ufs.map((x) => ({ valor: x.uf, rotulo: x.uf })) },
+          { nome: 'situacao', valor: situacao, vazio: 'Todas as situações', rotulo: 'Situação', opcoes: [
+            { valor: 'ativos', rotulo: 'Somente ativas' }, { valor: 'inativos', rotulo: 'Somente inativas' }] },
         ]} />
 
       <Painel semPadding>
         {linhas.length === 0 ? (
           <Vazio icone={<IconeBusca size={20} />} titulo="Nenhuma transportadora encontrada"
             descricao="Ajuste a busca ou remova algum filtro."
-            acao={<Link href="/transportadoras" className="btn btn-secundario btn-sm">Limpar filtros</Link>} />
+            acao={<div className="flex flex-wrap justify-center gap-2">
+              <Link href="/transportadoras" className="btn btn-secundario btn-sm">Limpar filtros</Link>
+              <BotaoNovo spec={SPEC} />
+            </div>} />
         ) : (
           <>
             <div className="rolagem-x">
@@ -72,6 +88,7 @@ export default async function PaginaTransportadoras({ searchParams }: { searchPa
                 <thead><tr>
                   <th>Razão social</th><th>CNPJ</th><th>Base</th><th>Modal</th>
                   <th>Abrangência</th><th className="num">Prazo médio</th><th>Contato</th>
+                  <th className="w-px"><span className="sr-only">Ações</span></th>
                 </tr></thead>
                 <tbody>
                   {linhas.map((t) => (
@@ -90,13 +107,15 @@ export default async function PaginaTransportadoras({ searchParams }: { searchPa
                       <td data-r="Abrangência"><Tag variante="neutra">{t.abrangencia}</Tag></td>
                       <td data-r="Prazo médio" className="num text-sm whitespace-nowrap">{t.prazo_medio_dias} d</td>
                       <td data-r="Contato" className="text-2xs text-ink-500 truncate max-w-[200px]">{t.email}</td>
+                      <td data-a>
+                        <AcoesLinha spec={SPEC} id={t.id} ativo={t.ativo} rotulo={t.razao_social} voltar={aqui} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <Paginacao base={`/transportadoras?q=${encodeURIComponent(q)}&modal=${encodeURIComponent(modal)}&abrangencia=${encodeURIComponent(abrangencia)}&uf=${uf}`}
-              pagina={pagina} porPagina={POR_PAGINA} total={total} />
+            <Paginacao base={base} pagina={pagina} porPagina={POR_PAGINA} total={total} />
           </>
         )}
       </Painel>

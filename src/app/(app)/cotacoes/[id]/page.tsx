@@ -4,12 +4,17 @@ import { exigir, exigirEmpresa } from '@/lib/acesso'
 import { todos, um } from '@/lib/db'
 import { cotacao, itensDaCotacao } from '@/lib/consultas'
 import { moeda, numero, data, dataHora, dataRelativa, dec } from '@/lib/formato'
+import { lerRecado } from '@/lib/flash'
 import { Painel, CabecalhoPagina, Campo, Vazio, StatusTag, Tag, Barra, Aviso } from '@/components/ui'
-import { IconeBalanca, IconeEnvio, IconePorta, IconeCotacao, IconeFabrica, IconeDocumento, IconeAjuste, IconeLista, IconeExterno } from '@/components/icones'
+import { Retorno, Recusa } from '@/components/Acoes'
+import { AcaoFluxo, AcaoConfirmada, IncluirItem, RemoverItem, ConvidarFornecedor } from '@/components/Fluxo'
+import { IconeBalanca, IconeEnvio, IconeCotacao, IconeFabrica, IconeDocumento, IconeAjuste, IconeLista, IconeExterno, IconeDesfazer, IconeCaixa } from '@/components/icones'
 
 export const dynamic = 'force-dynamic'
 
-export default async function PaginaCotacao({ params }: { params: { id: string } }) {
+export default async function PaginaCotacao(
+  { params, searchParams }: { params: { id: string }; searchParams: { [k: string]: string | undefined } }
+) {
   const s = await exigir('cotacoes')
   const id = Number(params.id)
   const c = await cotacao(id)
@@ -43,6 +48,34 @@ export default async function PaginaCotacao({ params }: { params: { id: string }
   const respondidos = convidados.filter((x) => x.status === 'respondido').length
   const podeEqualizar = respondidos > 0
 
+  const aqui = `/cotacoes/${id}`
+  // Rascunho e programada ainda aceitam mudanca de itens; depois do disparo
+  // a lista esta congelada — os fornecedores ja cotaram sobre ela.
+  const emMontagem = c.status === 'rascunho' || c.status === 'programada'
+  const viva = emMontagem || c.status === 'em_andamento'
+
+  // Catalogo visivel para esta empresa: o proprio dela mais o corporativo.
+  const materiais = emMontagem
+    ? await todos<{ id: number; codigo: string; descricao: string; sigla: string }>(
+        `select m.id, m.codigo, m.descricao, u.sigla
+           from materiais m join unidades u on u.id = m.unidade_id
+          where m.ativo = 1 and (m.empresa_id is null or m.empresa_id = ?)
+          order by m.descricao limit 600`, [c.empresa_id])
+    : []
+
+  // So homologados entram na lista: convidar quem nao passou pela homologacao
+  // e o atalho que transforma cotacao em risco de compliance.
+  const aptos = viva
+    ? await todos<{ id: number; razao_social: string; cidade: string; uf: string }>(
+        `select f.id, f.razao_social, f.cidade, f.uf
+           from fornecedores f
+          where f.ativo = 1 and f.homologado = 1
+            and (f.empresa_id is null or f.empresa_id = ?)
+            and not exists (select 1 from cotacao_fornecedores cf
+                             where cf.cotacao_id = ? and cf.fornecedor_id = f.id)
+          order by f.razao_social limit 400`, [c.empresa_id, id])
+    : []
+
   return (
     <>
       <CabecalhoPagina
@@ -51,27 +84,76 @@ export default async function PaginaCotacao({ params }: { params: { id: string }
         titulo={c.titulo}
         descricao={`Conduzida por ${c.comprador} · ${c.comprador_cargo}`}
         acoes={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <StatusTag status={c.status} />
+
             {podeEqualizar && (
-              <Link href={`/cotacoes/${id}/equalizacao`} className="btn btn-primario">
-                <IconeBalanca size={15} />Equalização automática
+              <Link href={`/cotacoes/${id}/equalizacao`} className="btn btn-primario btn-sm">
+                <IconeBalanca size={15} />Equalização
               </Link>
+            )}
+
+            {emMontagem && (
+              <AcaoConfirmada
+                op="cotacao.disparar" id={id} voltar={aqui} tom="primario" largura="w-80"
+                rotulo="Disparar convites" icone={<IconeEnvio size={15} />}
+                confirmar={`Disparar para ${convidados.length} fornecedor(es)`}
+                aviso={<>Os {convidados.length} convidados passam a poder responder, e a lista de
+                        itens fica congelada. O prazo de resposta comeca a contar agora.</>} />
+            )}
+
+            {c.status === 'em_andamento' && (
+              <AcaoConfirmada
+                op="cotacao.status" id={id} voltar={aqui} extras={{ _status: 'encerrada' }}
+                rotulo="Encerrar rodada" confirmar="Encerrar para novas propostas"
+                aviso={<>Nenhuma proposta nova entra depois disso. As {respondidos} ja recebidas
+                        seguem para a equalizacao.</>} />
+            )}
+
+            {c.status === 'encerrada' && (
+              <AcaoFluxo op="cotacao.status" id={id} voltar={aqui} extras={{ _status: 'em_andamento' }}>
+                <IconeDesfazer size={15} />Reabrir por 24h
+              </AcaoFluxo>
+            )}
+
+            {c.status === 'encerrada' && podeEqualizar && (
+              <AcaoConfirmada
+                op="cotacao.status" id={id} voltar={aqui} extras={{ _status: 'equalizada' }}
+                tom="primario" rotulo="Concluir equalizacao" confirmar="Marcar como equalizada"
+                aviso={<>A rodada passa a equalizada e a demanda de origem, se houver, vai para
+                        atendida. O comparativo continua acessivel.</>} />
+            )}
+
+            {c.status !== 'cancelada' && c.status !== 'equalizada' && (
+              <AcaoConfirmada
+                op="cotacao.status" id={id} voltar={aqui} extras={{ _status: 'cancelada' }}
+                tom="critico" rotulo="Cancelar" confirmar="Cancelar a cotacao"
+                aviso={<>A rodada e encerrada sem resultado e a demanda de origem volta para a fila
+                        de compras. O historico permanece.</>} />
             )}
           </div>
         } />
+
+      <Retorno ok={searchParams.ok} />
+      <Recusa mensagem={lerRecado(searchParams.f)?.erros._} />
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_340px] gap-4 sm:gap-5">
         <div className="space-y-4 sm:space-y-5 min-w-0">
           {/* ---------------------------------------------- itens */}
           <Painel semPadding icone={<IconeLista size={15} />} titulo={`Itens da cotação (${itens.length})`}
             acao={<span className="text-xs text-ink-500">Referência {moeda(totalReferencia)}</span>}>
-            {itens.length === 0 ? <Vazio icone={<IconeLista size={20} />} titulo="Sem itens nesta cotação" /> : (
+            {itens.length === 0 ? (
+              <Vazio icone={<IconeCaixa size={20} />} titulo="Sem itens nesta cotacao"
+                descricao={emMontagem
+                  ? 'Escolha o material e a quantidade abaixo. Cada inclusao e gravada na hora.'
+                  : 'A rodada foi disparada sem itens.'} />
+            ) : (
               <div className="overflow-x-auto">
                 <table className="tabela">
                   <thead><tr>
                     <th>#</th><th>Código</th><th>Descrição</th><th>Un.</th>
                     <th className="num">Quantidade</th><th className="num">Preço ref.</th><th className="num">Total ref.</th>
+                    {emMontagem && <th className="w-px"><span className="sr-only">Ações</span></th>}
                   </tr></thead>
                   <tbody>
                     {itens.map((i, n) => (
@@ -89,11 +171,23 @@ export default async function PaginaCotacao({ params }: { params: { id: string }
                         <td data-r="Quantidade" className="num text-sm">{numero(i.quantidade)}</td>
                         <td data-r="Preço ref." className="num text-sm">{moeda(i.preco_referencia)}</td>
                         <td data-r="Total ref." className="num text-sm font-medium">{moeda(i.preco_referencia * i.quantidade)}</td>
+                        {emMontagem && (
+                          <td data-a>
+                            <RemoverItem op="cotacao.item.rm" id={id} itemId={i.id} voltar={aqui} />
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+            )}
+
+            {emMontagem && (
+              <IncluirItem op="cotacao.item.add" id={id} voltar={aqui}
+                materiais={materiais.map((m) => ({
+                  valor: m.id, rotulo: `${m.codigo} — ${m.descricao} (${m.sigla})`,
+                }))} />
             )}
           </Painel>
 
@@ -105,12 +199,16 @@ export default async function PaginaCotacao({ params }: { params: { id: string }
                 <span className="w-20"><Barra valor={convidados.length ? respondidos / convidados.length : 0} cor="bg-positive-600" /></span>
               </div>
             }>
-            {convidados.length === 0 ? <Vazio icone={<IconeFabrica size={20} />} titulo="Nenhum fornecedor convidado" descricao="Os fornecedores são selecionados pelos grupos de materiais dos itens." /> : (
+            {convidados.length === 0 ? (
+              <Vazio icone={<IconeFabrica size={20} />} titulo="Nenhum fornecedor convidado"
+                descricao="Convide pelos grupos de materiais dos itens, ou escolha um a um abaixo." />
+            ) : (
               <div className="overflow-x-auto">
                 <table className="tabela">
                   <thead><tr>
                     <th>Fornecedor</th><th>Praça</th><th>Convidado</th>
                     <th>Visualizou</th><th>Respondeu</th><th>Situação</th><th>Portal</th>
+                    {viva && <th className="w-px"><span className="sr-only">Ações</span></th>}
                   </tr></thead>
                   <tbody>
                     {convidados.map((f) => (
@@ -133,12 +231,25 @@ export default async function PaginaCotacao({ params }: { params: { id: string }
                             <IconeExterno size={13} />Ver portal
                           </Link>
                         </td>
+                        {viva && (
+                          <td data-a>
+                            {f.status === 'respondido'
+                              ? <span className="text-2xs text-ink-400">respondeu</span>
+                              : <RemoverItem op="cotacao.desconvidar" id={id} itemId={f.id} voltar={aqui}
+                                              campo="convite_id" titulo="Retirar convite" />}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
+
+            {viva && <ConvidarFornecedor id={id} voltar={aqui}
+              fornecedores={aptos.map((f) => ({
+                valor: f.id, rotulo: `${f.razao_social} — ${f.cidade}/${f.uf}`,
+              }))} />}
           </Painel>
 
           {/* ---------------------------------------------- disparos */}
