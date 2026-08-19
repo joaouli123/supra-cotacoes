@@ -35,37 +35,30 @@ const EMAIL = (process.env.SUPRA_ADMIN_EMAIL || '').trim()
 const SENHA = process.env.SUPRA_ADMIN_SENHA || ''
 const NOME = (process.env.SUPRA_ADMIN_NOME || 'Administrador SUPRA').trim()
 
-// Trocar SUPRA_ADMIN_EMAIL nao renomeia a conta antiga: a busca acima e por
-// e-mail, entao o e-mail novo simplesmente nao acha nada e uma segunda conta
-// nasce. A primeira continuaria ai, admin_central, com a senha antiga valendo —
-// uma conta de administrador que ninguem lembra que existe. Aqui ela perde a
-// senha e para de logar. O filtro descreve exatamente o que este script cria
-// (admin da plataforma, sem empresa e sem fornecedor); conta de gente comum
-// nao se encaixa e nao e tocada.
-const SQL_ORFAOS = `update usuarios set senha_hash = null
-    where lower(email) <> lower(:1)
-      and senha_hash is not null
-      and perfil = 'admin_central'
+// A conta e casada por e-mail. Trocar SUPRA_ADMIN_EMAIL, sem mais nada, faria a
+// busca nao achar ninguem e uma segunda conta nascer — a antiga continuaria ai,
+// admin_central, com a senha antiga valendo e fora do alcance da variavel que
+// deveria rotaciona-la. Entao, quando o e-mail configurado nao existe mas ja ha
+// exatamente uma conta com a forma que este script cria, o certo e **renomear**
+// essa conta, nao criar outra: o id se mantem, e com ele o historico de
+// auditoria, que aponta para o usuario pelo id.
+const FORMA_GERIDA = `perfil = 'admin_central'
       and empresa_id is null
-      and fornecedor_id is null`
+      and fornecedor_id is null
+      and senha_hash is not null`
 
-function avisar(linhas) {
+const SQL_GERIDAS = `select id, email from usuarios where ${FORMA_GERIDA} order by id`
+
+// Rede de seguranca para o caso ambiguo (duas ou mais contas nessa forma): nao
+// da para adivinhar qual renomear, entao cria-se a nova e as demais perdem o
+// login. A linha continua na base; so a senha sai.
+const SQL_ORFAOS = `update usuarios set senha_hash = null
+    where lower(email) <> lower(:1) and ${FORMA_GERIDA}`
+
+function avisarOrfaos(linhas) {
   if (!linhas.length) return
   const lista = linhas.map((r) => `${r.email} (id ${r.id})`).join(', ')
   console.log(`  login revogado de ${linhas.length} conta(s) administrativa(s) orfa(s): ${lista}`)
-}
-
-async function revogarOrfaos(consultar, marcador) {
-  const linhas = await consultar(
-    `${SQL_ORFAOS.replace(':1', marcador)} returning id, email`,
-    [EMAIL]
-  )
-  avisar(linhas)
-}
-
-function revogarOrfaosSync(db) {
-  const linhas = db.prepare(SQL_ORFAOS.replace(':1', '?') + ' returning id, email').all(EMAIL)
-  avisar(linhas)
 }
 
 async function comPostgres(url) {
@@ -84,24 +77,33 @@ async function comPostgres(url) {
       return
     }
     const hash = gerarHash(SENHA)
+    const aplicar = (id) => c.query(
+      `update usuarios set email=$1, senha_hash=$2, perfil='admin_central', ativo=1,
+                           empresa_id=null, fornecedor_id=null, nome=$3,
+                           cargo='Administrador da Plataforma'
+        where id=$4`, [EMAIL, hash, NOME, id])
+
     const achou = await c.query('select id from usuarios where lower(email) = lower($1) order by id limit 1', [EMAIL])
     if (achou.rows.length) {
-      await c.query(
-        `update usuarios set senha_hash=$1, perfil='admin_central', ativo=1, empresa_id=null,
-                             fornecedor_id=null, nome=$2, cargo='Administrador da Plataforma'
-          where id=$3`, [hash, NOME, achou.rows[0].id])
+      await aplicar(achou.rows[0].id)
       console.log(`  conta ${EMAIL} atualizada (id ${achou.rows[0].id})`)
-    } else {
-      const novo = await c.query(
-        `insert into usuarios (empresa_id, fornecedor_id, nome, email, cargo, perfil, ativo, senha_hash)
-         values (null, null, $1, $2, 'Administrador da Plataforma', 'admin_central', 1, $3) returning id`,
-        [NOME, EMAIL, hash])
-      console.log(`  conta ${EMAIL} criada (id ${novo.rows[0].id})`)
+      return
     }
-    await revogarOrfaos(
-      (sql, ps) => c.query(sql, ps).then((r) => r.rows),
-      '$1'
-    )
+
+    const geridas = (await c.query(SQL_GERIDAS)).rows
+    if (geridas.length === 1) {
+      await aplicar(geridas[0].id)
+      console.log(`  conta ${geridas[0].email} renomeada para ${EMAIL} (id ${geridas[0].id})`)
+      return
+    }
+
+    const novo = await c.query(
+      `insert into usuarios (empresa_id, fornecedor_id, nome, email, cargo, perfil, ativo, senha_hash)
+       values (null, null, $1, $2, 'Administrador da Plataforma', 'admin_central', 1, $3) returning id`,
+      [NOME, EMAIL, hash])
+    console.log(`  conta ${EMAIL} criada (id ${novo.rows[0].id})`)
+    const orfas = await c.query(`${SQL_ORFAOS.replace(':1', '$1')} returning id, email`, [EMAIL])
+    avisarOrfaos(orfas.rows)
   } finally {
     await c.end()
   }
@@ -118,20 +120,28 @@ function comSqlite() {
     db.close(); return
   }
   const hash = gerarHash(SENHA)
+  const aplicar = (id) => db.prepare(
+    `update usuarios set email=?, senha_hash=?, perfil='admin_central', ativo=1,
+                         empresa_id=null, fornecedor_id=null, nome=?,
+                         cargo='Administrador da Plataforma'
+      where id=?`).run(EMAIL, hash, NOME, id)
+
   const achou = db.prepare('select id from usuarios where lower(email) = lower(?) order by id limit 1').get(EMAIL)
+  const geridas = db.prepare(SQL_GERIDAS).all()
   if (achou) {
-    db.prepare(`update usuarios set senha_hash=?, perfil='admin_central', ativo=1, empresa_id=null,
-                                    fornecedor_id=null, nome=?, cargo='Administrador da Plataforma'
-                 where id=?`).run(hash, NOME, achou.id)
+    aplicar(achou.id)
     console.log(`  conta ${EMAIL} atualizada (id ${achou.id})`)
+  } else if (geridas.length === 1) {
+    aplicar(geridas[0].id)
+    console.log(`  conta ${geridas[0].email} renomeada para ${EMAIL} (id ${geridas[0].id})`)
   } else {
     const proximo = db.prepare('select coalesce(max(id),0)+1 n from usuarios').get().n
     db.prepare(`insert into usuarios (id, empresa_id, fornecedor_id, nome, email, cargo, perfil, ativo, senha_hash)
                 values (?, null, null, ?, ?, 'Administrador da Plataforma', 'admin_central', 1, ?)`)
       .run(proximo, NOME, EMAIL, hash)
     console.log(`  conta ${EMAIL} criada (id ${proximo})`)
+    avisarOrfaos(db.prepare(SQL_ORFAOS.replace(':1', '?') + ' returning id, email').all(EMAIL))
   }
-  revogarOrfaosSync(db)
   db.close()
 }
 
