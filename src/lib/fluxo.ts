@@ -18,9 +18,15 @@
 import { randomBytes } from 'node:crypto'
 import { um, todos, executar, inserirRetornandoId, transacao } from './db'
 import type { Sessao } from './sessao'
+import { enviarConvites, avisarEncerramento, emSegundoPlano } from './disparo'
 
 export type Fim = { ok: true; destino: string } | { ok: false; erro: string }
-export type Autor = { s: Sessao; ip: string }
+/**
+ * Quem executa a acao. `base` e o endereco publico da plataforma, capturado
+ * na requisicao: os links que saem por e-mail sao absolutos e precisam dele,
+ * e quem envia roda depois da resposta, sem requisicao por perto.
+ */
+export type Autor = { s: Sessao; ip: string; base: string }
 
 const agora = () => new Date().toISOString()
 const so = (v: FormDataEntryValue | null) => String(v ?? '').trim()
@@ -493,24 +499,38 @@ export async function dispararCotacao(autor: Autor, f: FormData): Promise<Fim> {
 
   const janela = Math.min(720, Math.max(1, Number(so(f.get('janela_horas'))) || 48))
 
-  return transacao(async () => {
+  const fim = await transacao(async () => {
     const quando = agora()
     const encerra = new Date(Date.now() + janela * 3_600_000).toISOString()
     await executar(
       'update cotacoes set status = ?, disparado_em = ?, encerra_em = ? where id = ?',
       ['em_andamento', quando, encerra, c.id])
-    await executar(
+    // Entregues e falhas nascem zerados e sobem conforme o SMTP responde.
+    // Preenche-los aqui seria inventar um numero: no instante do commit
+    // nenhuma mensagem saiu ainda.
+    const disparoId = await inserirRetornandoId(
       `insert into disparo_logs
         (empresa_id, cotacao_id, agendamento_id, canal, destinatarios, entregues, falhas, origem, criado_em)
        values (?,?,?,?,?,?,?,?,?)`,
-      [c.empresa_id, c.id, null, c.canal, convites.length, convites.length, 0, 'manual', quando])
+      [c.empresa_id, c.id, null, c.canal, convites.length, 0, 0, 'manual', quando])
     await anotar(autor, c.empresa_id, 'cotacoes', c.id, c.numero, 'alteracao', [
       { campo: 'status', de: c.status, para: 'em_andamento' },
       { campo: 'disparado_em', de: null, para: quando },
       { campo: 'destinatarios', de: null, para: String(convites.length) },
     ])
-    return { ok: true as const, destino: `/cotacoes/${c.id}?ok=disparada` }
+    return { disparoId, destino: `/cotacoes/${c.id}?ok=disparada` }
   })
+
+  // Canal `portal` significa que o fornecedor ja acompanha a rodada por
+  // dentro; nao ha e-mail a mandar. Nos outros dois, o envio corre depois
+  // do commit — a transacao nao pode ficar aberta esperando o SMTP.
+  if (c.canal !== 'portal') {
+    emSegundoPlano(() => enviarConvites({
+      cotacaoId: c.id, base: autor.base, disparoId: fim.disparoId, tipo: 'convite',
+    }))
+  }
+
+  return { ok: true as const, destino: fim.destino }
 }
 
 export async function mudarStatusCotacao(autor: Autor, f: FormData): Promise<Fim> {
@@ -534,7 +554,7 @@ export async function mudarStatusCotacao(autor: Autor, f: FormData): Promise<Fim
     if (!Number(r)) return { ok: false, erro: 'Não há propostas recebidas para equalizar.' }
   }
 
-  return transacao(async () => {
+  const fim = await transacao(async () => {
     const quando = agora()
     if (destinoStatus === 'encerrada') {
       await executar('update cotacoes set status = ?, encerrado_em = ? where id = ?', [destinoStatus, quando, c.id])
@@ -581,4 +601,15 @@ export async function mudarStatusCotacao(autor: Autor, f: FormData): Promise<Fim
     const volta = destinoStatus === 'equalizada' ? `/cotacoes/${c.id}/equalizacao` : `/cotacoes/${c.id}`
     return { ok: true as const, destino: `${volta}?ok=${marca[destinoStatus]}` }
   })
+
+  // Fechar a rodada e uma informacao que interessa aos dois lados: quem
+  // respondeu quer saber que a proposta entrou na analise, e quem nao
+  // respondeu precisa saber que o prazo passou — senao manda depois e a
+  // recusa parece arbitraria. Fora da transacao, pelo mesmo motivo do
+  // disparo. Cancelamento nao avisa: rodada cancelada e assunto interno.
+  if (fim.ok && destinoStatus === 'encerrada' && c.canal !== 'portal') {
+    emSegundoPlano(() => avisarEncerramento(c.id))
+  }
+
+  return fim
 }

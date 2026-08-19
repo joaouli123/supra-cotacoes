@@ -69,10 +69,12 @@ else
 fi
 
 # Idempotentes, aplicados por cima da base existente a cada subida.
-# Nenhum dos dois apaga dado: o primeiro garante a coluna de senha e a conta
+# Nenhum dos tres apaga dado: o primeiro garante a coluna de senha e a conta
 # administrativa; o segundo troca tokens fracos do portal, cria os indices que
-# faltavam e atualiza as estatisticas do planejador.
+# faltavam e atualiza as estatisticas do planejador; o terceiro cria a tabela
+# que registra cada e-mail que a plataforma tentou entregar.
 node --no-warnings scripts/migrar-auth.mjs
 node --no-warnings scripts/migrar-base.mjs
+node --no-warnings scripts/migrar-email.mjs
 
 exec "$@"

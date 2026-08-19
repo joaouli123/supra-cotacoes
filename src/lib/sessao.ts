@@ -132,12 +132,12 @@ export function filtroEmpresa(idEmpresa: number | null, alias = '', compartilhav
 export type Area =
   | 'painel' | 'cadastros' | 'demandas' | 'cotacoes' | 'agendamentos'
   | 'integracoes' | 'auditoria' | 'admin' | 'arquitetura' | 'portal'
-  | 'relatorios' | 'usuarios'
+  | 'relatorios' | 'usuarios' | 'emails'
 
 export function podeVer(perfil: Perfil, area: Area): boolean {
   const mapa: Record<Perfil, Area[]> = {
-    admin_central: ['painel', 'cadastros', 'demandas', 'cotacoes', 'agendamentos', 'integracoes', 'auditoria', 'admin', 'arquitetura', 'relatorios', 'usuarios'],
-    gestor:        ['painel', 'cadastros', 'demandas', 'cotacoes', 'agendamentos', 'integracoes', 'auditoria', 'arquitetura', 'relatorios', 'usuarios'],
+    admin_central: ['painel', 'cadastros', 'demandas', 'cotacoes', 'agendamentos', 'integracoes', 'auditoria', 'admin', 'arquitetura', 'relatorios', 'usuarios', 'emails'],
+    gestor:        ['painel', 'cadastros', 'demandas', 'cotacoes', 'agendamentos', 'integracoes', 'auditoria', 'arquitetura', 'relatorios', 'usuarios', 'emails'],
     comprador:     ['painel', 'cadastros', 'demandas', 'cotacoes', 'arquitetura', 'relatorios'],
     fornecedor:    ['portal'],
   }

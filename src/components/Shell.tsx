@@ -5,7 +5,7 @@ import { iniciais } from '@/lib/formato'
 import {
   IconePainel, IconeCaixa, IconeFabrica, IconePessoas, IconeCaminhao, IconeLista,
   IconeBalanca, IconeRelogio, IconeConector, IconeEscudo, IconePredio, IconeChevron,
-  IconeArquitetura, IconePorta, IconeCheck, IconeCadeado, IconeGrafico, IconeUsuario,
+  IconeArquitetura, IconePorta, IconeCheck, IconeCadeado, IconeGrafico, IconeUsuario, IconeEmail,
 } from './icones'
 
 function secoesPara(perfil: Perfil): SecaoNav[] {
@@ -36,6 +36,7 @@ function secoesPara(perfil: Perfil): SecaoNav[] {
   const plataforma: SecaoNav = {
     titulo: 'Plataforma',
     itens: [
+      { href: '/emails', rotulo: 'E-mails', icone: <IconeEmail size={16} /> },
       { href: '/integracoes', rotulo: 'Integrações ERP', icone: <IconeConector size={16} /> },
       { href: '/auditoria', rotulo: 'Auditoria', icone: <IconeEscudo size={16} /> },
       { href: '/usuarios', rotulo: 'Usuários', icone: <IconeUsuario size={16} /> },

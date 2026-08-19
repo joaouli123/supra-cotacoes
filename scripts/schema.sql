@@ -337,3 +337,25 @@ create table erp_eventos (
 );
 create index ix_erpev_conector on erp_eventos(conector_id);
 create index ix_erpev_status   on erp_eventos(status);
+
+-- Registro de cada mensagem que a plataforma tentou entregar. Sem chave
+-- estrangeira de proposito: o log tem de sobreviver a exclusao da cotacao
+-- ou do fornecedor que o originou.
+create table email_logs (
+  id            integer primary key,
+  empresa_id    integer,
+  cotacao_id    integer,
+  fornecedor_id integer,
+  tipo          text    not null,
+  para          text    not null,
+  entregue_para text    not null,
+  assunto       text    not null,
+  modo          text    not null,
+  estado        text    not null,
+  erro          text,
+  ms            integer not null,
+  criado_em     text    not null
+);
+create index ix_email_criado  on email_logs(criado_em desc);
+create index ix_email_cotacao on email_logs(cotacao_id);
+create index ix_email_estado  on email_logs(estado, criado_em desc);

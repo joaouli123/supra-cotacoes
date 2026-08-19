@@ -66,6 +66,9 @@ const MAPA_STATUS: Record<string, { rotulo: string; v: Variante }> = {
   sucesso:       { rotulo: 'Sucesso', v: 'positiva' },
   pendente:      { rotulo: 'Pendente', v: 'atencao' },
   reprocessando: { rotulo: 'Reprocessando', v: 'atencao' },
+  enviado:       { rotulo: 'Enviado', v: 'positiva' },
+  falhou:        { rotulo: 'Falhou', v: 'critica' },
+  simulado:      { rotulo: 'Simulado', v: 'neutra' },
 }
 export function StatusTag({ status }: { status: string }) {
   const s = MAPA_STATUS[status] ?? { rotulo: status, v: 'neutra' as Variante }

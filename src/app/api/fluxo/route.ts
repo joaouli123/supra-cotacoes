@@ -12,6 +12,7 @@ import { sessao, podeVer } from '@/lib/sessao'
 import { redirecionar, origemPropria } from '@/lib/http'
 import { guardarRecado } from '@/lib/flash'
 import type { Fim } from '@/lib/fluxo'
+import { baseDe } from '@/lib/disparo'
 import {
   criarDemanda, adicionarItemDemanda, removerItemDemanda, mudarStatusDemanda,
   criarCotacao, adicionarItemCotacao, removerItemCotacao,
@@ -57,7 +58,9 @@ export async function POST(req: Request) {
   // O portal do fornecedor responde propostas; nao conduz a rodada.
   if (s.perfil === 'fornecedor') return new Response('Não encontrado', { status: 404 })
 
-  const r: Fim = await alvo.fn({ s, ip: ipDe(req) }, form)
+  // O endereco publico e capturado aqui porque o envio dos convites corre
+  // depois desta resposta, quando nao ha mais requisicao para consultar.
+  const r: Fim = await alvo.fn({ s, ip: ipDe(req), base: baseDe(req) }, form)
   if (r.ok) return redirecionar(r.destino, 303)
 
   const voltar = String(form.get('_voltar') ?? '') || '/painel'

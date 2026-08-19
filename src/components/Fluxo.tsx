@@ -16,13 +16,15 @@ const ROTA = '/api/fluxo'
 /* ------------------------------------------------------------- direto ---- */
 
 /** Botao que executa a operacao no clique, sem confirmar. */
-export function AcaoFluxo({ op, id, voltar, extras, classe, titulo, children }: {
+export function AcaoFluxo({ op, id, voltar, extras, classe, titulo, rota, children }: {
   op: string; id?: number; voltar: string
   extras?: Record<string, string | number>
+  /** Destino do POST. As acoes de e-mail vivem em `/api/email`. */
+  rota?: string
   classe?: string; titulo?: string; children: ReactNode
 }) {
   return (
-    <form method="post" action={ROTA} className="inline">
+    <form method="post" action={rota ?? ROTA} className="inline">
       <input type="hidden" name="_op" value={op} />
       {id !== undefined && <input type="hidden" name="_id" value={id} />}
       <input type="hidden" name="_voltar" value={voltar} />
@@ -43,11 +45,13 @@ export function AcaoFluxo({ op, id, voltar, extras, classe, titulo, children }: 
  * Para o que nao tem desfazer: disparar convites, encerrar a rodada,
  * cancelar uma requisicao.
  */
-export function AcaoConfirmada({ op, id, voltar, extras, rotulo, icone, aviso, confirmar, tom = 'normal', largura = 'w-72' }: {
+export function AcaoConfirmada({ op, id, voltar, extras, rotulo, icone, aviso, confirmar, tom = 'normal', largura = 'w-72', rota }: {
   op: string; id?: number; voltar: string
   extras?: Record<string, string | number>
   rotulo: string; icone?: ReactNode; aviso: ReactNode; confirmar: string
   tom?: 'normal' | 'primario' | 'critico'; largura?: string
+  /** Destino do POST. As acoes de e-mail vivem em `/api/email`. */
+  rota?: string
 }) {
   const gatilho =
     tom === 'primario' ? 'btn btn-primario btn-sm cursor-pointer'
@@ -64,7 +68,7 @@ export function AcaoConfirmada({ op, id, voltar, extras, rotulo, icone, aviso, c
       <div className={`absolute right-0 top-full mt-1 z-20 ${largura} p-3 rounded-lg border border-ink-200
                        bg-white shadow-lg text-left`}>
         <p className="text-xs text-ink-600 leading-relaxed mb-2.5">{aviso}</p>
-        <form method="post" action={ROTA}>
+        <form method="post" action={rota ?? ROTA}>
           <input type="hidden" name="_op" value={op} />
           {id !== undefined && <input type="hidden" name="_id" value={id} />}
           <input type="hidden" name="_voltar" value={voltar} />

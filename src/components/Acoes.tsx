@@ -172,6 +172,9 @@ const MENSAGENS: Record<string, string> = {
   desconvidado: 'Convite retirado.',
   atendida: 'Demanda marcada como atendida.',
   reaberta: 'Registro reaberto.',
+  teste_enviado: 'Mensagem de teste entregue ao servidor. Confira a caixa de entrada — e o histórico abaixo.',
+  reenviado: 'Reenvio em andamento. As contagens desta rodada sobem conforme o servidor responde.',
+  lembrete: 'Lembretes em andamento para quem ainda não respondeu.',
 }
 
 /** Faixa de confirmacao apos uma acao, lida do `?ok=` da URL. */

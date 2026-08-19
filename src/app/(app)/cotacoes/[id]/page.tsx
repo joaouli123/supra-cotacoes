@@ -8,7 +8,7 @@ import { lerRecado } from '@/lib/flash'
 import { Painel, CabecalhoPagina, Campo, Vazio, StatusTag, Tag, Barra, Aviso } from '@/components/ui'
 import { Retorno, Recusa } from '@/components/Acoes'
 import { AcaoFluxo, AcaoConfirmada, IncluirItem, RemoverItem, ConvidarFornecedor } from '@/components/Fluxo'
-import { IconeBalanca, IconeEnvio, IconeCotacao, IconeFabrica, IconeDocumento, IconeAjuste, IconeLista, IconeExterno, IconeDesfazer, IconeCaixa } from '@/components/icones'
+import { IconeBalanca, IconeEnvio, IconeCotacao, IconeFabrica, IconeDocumento, IconeAjuste, IconeLista, IconeExterno, IconeDesfazer, IconeCaixa, IconeSino } from '@/components/icones'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,6 +47,10 @@ export default async function PaginaCotacao(
 
   const respondidos = convidados.filter((x) => x.status === 'respondido').length
   const podeEqualizar = respondidos > 0
+  // Quem ainda nao respondeu e o unico publico de reenvio e lembrete: insistir
+  // com quem ja cumpriu o pedido e a forma mais rapida de virar spam.
+  const pendentes = convidados.filter(
+    (x) => x.status === 'convidado' || x.status === 'visualizado').length
 
   const aqui = `/cotacoes/${id}`
   // Rascunho e programada ainda aceitam mudanca de itens; depois do disparo
@@ -100,6 +104,24 @@ export default async function PaginaCotacao(
                 confirmar={`Disparar para ${convidados.length} fornecedor(es)`}
                 aviso={<>Os {convidados.length} convidados passam a poder responder, e a lista de
                         itens fica congelada. O prazo de resposta comeca a contar agora.</>} />
+            )}
+
+            {c.status === 'em_andamento' && pendentes > 0 && (
+              <AcaoConfirmada
+                rota="/api/email" op="lembrete" id={id} voltar={aqui}
+                rotulo="Lembrar pendentes" icone={<IconeSino size={15} />} largura="w-80"
+                confirmar={`Enviar lembrete a ${pendentes} fornecedor(es)`}
+                aviso={<>Mensagem curta com o prazo e o link de resposta, so para quem ainda nao
+                        enviou proposta. Quem ja respondeu nao recebe nada.</>} />
+            )}
+
+            {c.status === 'em_andamento' && pendentes > 0 && (
+              <AcaoConfirmada
+                rota="/api/email" op="reenviar" id={id} voltar={aqui}
+                rotulo="Reenviar convite" icone={<IconeEnvio size={15} />} largura="w-80"
+                confirmar={`Reenviar a ${pendentes} fornecedor(es)`}
+                aviso={<>Repete o convite completo, com os itens e o link do portal, para quem ainda
+                        nao respondeu. Util quando a primeira mensagem caiu no spam.</>} />
             )}
 
             {c.status === 'em_andamento' && (
